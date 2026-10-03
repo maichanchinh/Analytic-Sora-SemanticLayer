@@ -29,7 +29,7 @@ Nguồn dữ liệu được đọc trực tiếp từ Silver Parquet trong Rust
 
 ### Python Core
 
-- Python 3.13, `uv`
+- Python 3.14, `uv`
 - DuckDB, Ibis Framework, Boring Semantic Layer
 - FastAPI, FastMCP, Pydantic
 - SQLGlot (optional)
