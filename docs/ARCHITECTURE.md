@@ -2,7 +2,7 @@
 
 ## 1. Mục tiêu
 
-Xây dựng analytics layer độc lập trên dữ liệu Silver từ Sora. Hệ thống cung cấp semantic metrics/dimensions dùng chung, API có Authorization cho Dashboard, MCP cho Codex/AI Agent và Dynamic Dashboard render từ JSON. Không thực hiện ETL và không thay đổi dự án Sora.
+Xây dựng analytics layer độc lập trên dữ liệu Silver từ Sora. Hệ thống cung cấp semantic metrics/dimensions dùng chung qua API, MCP cho Codex/AI Agent và Dynamic Dashboard render từ JSON. Authentication/Authorization chưa nằm trong phạm vi hiện tại. Không thực hiện ETL và không thay đổi dự án Sora.
 
 ## 2. Architecture
 
@@ -10,9 +10,8 @@ Xây dựng analytics layer độc lập trên dữ liệu Silver từ Sora. H�
 flowchart TB
     Dashboard[Next.js Dashboard] --> API[FastAPI]
     Agent[Codex / AI Agent] --> MCP[FastMCP]
-    API --> Auth[Shared Authorization]
-    MCP --> Auth
-    Auth --> Query[Shared Query Service]
+    API --> Query[Shared Query Service]
+    MCP --> Query
     Query --> Registry[Semantic Registry\nBoring Semantic Layer]
     Registry --> Ibis[Ibis expressions]
     Ibis --> DuckDB[DuckDB\nQuery engine]
@@ -162,8 +161,7 @@ Luồng xử lý query:
 
 ```mermaid
 flowchart TD
-    Request[QueryRequest] --> Authorization[Authorization]
-    Authorization --> Registry[Semantic Registry\nvalidate metrics, dimensions, filters]
+    Request[QueryRequest] --> Registry[Semantic Registry\nvalidate metrics, dimensions, filters]
     Registry --> Expression[Ibis Expression]
     Expression --> Engine[DuckDB]
     Engine --> Files[Silver Parquet / RustFS]
@@ -172,37 +170,9 @@ flowchart TD
     Result --> Consumer[FastAPI response or MCP result]
 ```
 
-## 7. Authorization
+## 7. Authentication and Authorization
 
-Authorization nằm trong Python Core. Context hỗ trợ:
-
-```text
-principal
-role
-permissions
-allowed_app_ids
-```
-
-Initial roles:
-
-```text
-admin
-viewer
-agent
-```
-
-Ví dụ quyền viewer:
-
-```yaml
-viewer:
-  apps:
-    - blur_face
-  permissions:
-    - metrics.read
-    - dashboard.read
-```
-
-Mọi request qua API và MCP phải đi qua cùng Authorization service để cùng áp dụng quyền và giới hạn app.
+Chưa được triển khai và chưa nằm trong phạm vi dự án hiện tại. API và MCP hiện không áp dụng principal, role, permission hoặc app scope; giới hạn truy cập qua môi trường/network boundary.
 
 ## 8. FastAPI
 
@@ -224,27 +194,15 @@ Không tạo endpoint riêng cho từng metric. API dùng chung Query Service v�
 
 ## 9. FastMCP
 
-Initial tools:
+Tools trong SOF-70:
 
 ```text
 list_apps
-
 list_metrics
-
-describe_metric
-
 query_metrics
-
-get_app_overview
-
-get_retention
-
-get_campaign_performance
-
-compare_periods
 ```
 
-Không expose raw SQL làm interface chính. Mọi tool truy vấn dữ liệu dùng chung Authorization và Query Service.
+Không expose raw SQL. Các tool truy vấn dùng chung Query Service.
 
 ## 10. Dynamic Dashboard
 

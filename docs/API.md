@@ -1,4 +1,4 @@
-# FastAPI
+# FastAPI and MCP
 
 ## Chạy local
 
@@ -9,6 +9,24 @@ uv run uvicorn sora_semantic.api:app --host 127.0.0.1 --port 8000
 ```
 
 Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
+
+## FastMCP
+
+MCP dùng cùng `SemanticRegistry` và `QueryService`, mở kết nối Silver read-only riêng theo lifespan của server. Có thể chạy local qua `stdio`:
+
+```sh
+uv run fastmcp run sora_semantic.mcp:mcp --transport stdio
+```
+
+Hoặc chạy server `Streamable HTTP` tại `/mcp`:
+
+```sh
+uv run fastmcp run sora_semantic.mcp:mcp --transport streamable-http --host 127.0.0.1 --port 8001 --path /mcp
+```
+
+Hai lệnh dùng cùng biến môi trường Silver như API. MCP cung cấp `list_apps`, `list_metrics` và `query_metrics`; tool query nhận `model`, `metrics`, `dimensions`, `filters` và `date_range` theo shared `QueryRequest`. Kết quả dùng shape `model`, `dimensions`, `metrics`, `rows`; query contract lỗi được trả dưới dạng MCP tool error. Không có raw SQL tool.
+
+Authorization và app scope chưa được triển khai trong dự án hiện tại. Bảo vệ server HTTP bằng network boundary phù hợp.
 
 ## Endpoints
 
@@ -94,4 +112,12 @@ ID không hợp lệ hoặc không có config trả `404`. Config không đọc 
 
 ## Phạm vi hiện tại
 
-API expose apps, semantic metadata, query và dashboard JSON config. Dashboard UI, authentication và CORS chưa được triển khai trong phase này.
+API expose apps, semantic metadata, query và dashboard JSON config. MCP expose apps, metric metadata và query qua `stdio` hoặc `Streamable HTTP`. Dashboard UI, authentication và CORS chưa được triển khai trong phase này.
+
+## Kiểm tra
+
+Chạy toàn bộ automated tests (gồm MCP `stdio` và `Streamable HTTP` smoke tests) bằng:
+
+```sh
+uv run python -m unittest discover -s tests -v
+```

@@ -79,7 +79,7 @@ Ví dụ mô tả contract (khóa JSON là đề xuất cấu hình, không ph�
 }
 ```
 
-Query Service nhận một model cho mỗi query, date range inclusive, filter scalar hoặc list; dashboard không tự join model. Invalid model/metric/dimension/filter được API trả về dưới dạng lỗi `422`; dashboard tương lai phải hiện lỗi widget rõ ràng, không biến thành kết quả rỗng/0. Request/response API được mô tả trong [FastAPI](API.md).
+Query Service nhận một model cho mỗi query, date range inclusive, filter scalar hoặc list; dashboard không tự join model. Invalid model/metric/dimension/filter được API trả về dưới dạng lỗi `422`; dashboard tương lai phải hiện lỗi widget rõ ràng, không biến thành kết quả rỗng/0. Request/response API được mô tả trong [API/MCP docs](API.md).
 
 ## Acceptance criteria
 

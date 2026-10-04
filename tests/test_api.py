@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from sora_semantic.api import create_app
 from sora_semantic.data.silver import SilverReadError
 from sora_semantic.semantic.registry import SemanticRegistry
+from test_support import ignore_known_ibis_duckdb_deprecation
 
 
 APP_ROWS = [
@@ -92,6 +93,11 @@ async def api_client(app, *, raise_app_exceptions: bool = True):
 
 
 class ApiTests(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        ignore_known_ibis_duckdb_deprecation()
+
     async def test_apps_are_read_from_silver_and_sorted_by_display_name(self) -> None:
         source = InMemorySilverSource()
         async with api_client(create_app(source_factory=lambda: source)) as client:

@@ -2,19 +2,25 @@
 
 ## Cấu trúc dự án
 
-Định hướng cấu trúc gồm Python Core trong `src/sora_semantic/` và Dashboard trong `dashboard/`; cấu hình dashboard JSON đặt tại `dashboard/config/`, kiểm thử Python tại `tests/`. Chi tiết thành phần và luồng dữ liệu nằm trong [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Đây là cấu trúc mục tiêu; hiện repo mới có tài liệu, chưa có source code hoặc toolchain.
+Python Core nằm trong `src/sora_semantic/`, dashboard JSON trong `dashboard/config/`, kiểm thử Python trong `tests/`. Chi tiết thành phần và luồng dữ liệu nằm trong [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Phát triển và kiểm thử
 
-Chưa có lệnh build, chạy, lint hay test vì chưa khởi tạo Python Core và Dashboard. Khi bổ sung toolchain, cập nhật lệnh chuẩn ở đây và trong README trước khi yêu cầu người đóng góp chạy chúng. Không báo một bước kiểm tra đã đạt nếu chưa thực thi.
+Quản lý dependencies bằng `uv` trên Python 3.14. Các lệnh chuẩn được ghi ở đây và trong [README.md](README.md). Chạy automated tests:
+
+```sh
+uv run python -m unittest discover -s tests -v
+```
+
+Chạy API và MCP xem [docs/API.md](docs/API.md). Không báo một bước kiểm tra đã đạt nếu chưa thực thi.
 
 ## Quy ước code
 
-Python Core dùng Python 3.13 và `uv`; Dashboard dùng Next.js, TypeScript và React. Dùng formatter/linter tiêu chuẩn được chọn cho từng toolchain khi chúng được cấu hình; giữ thay đổi tập trung và tên biến/hàm/mô-đun mô tả đúng trách nhiệm. Định nghĩa metric/dimension trong semantic layer, không tạo endpoint riêng cho từng metric hoặc hard-code dashboard thành từng trang React.
+Python Core dùng Python 3.14 và `uv`; Dashboard dùng Next.js, TypeScript và React. Dùng formatter/linter tiêu chuẩn được chọn cho từng toolchain khi chúng được cấu hình; giữ thay đổi tập trung và tên biến/hàm/mô-đun mô tả đúng trách nhiệm. Định nghĩa metric/dimension trong semantic layer, không tạo endpoint riêng cho từng metric hoặc hard-code dashboard thành từng trang React.
 
 ## Kiểm thử
 
-Chưa chọn framework kiểm thử hoặc ngưỡng coverage. Khi triển khai code, thêm kiểm thử cho hành vi cùng phần triển khai, bao gồm regression cho bug fix; ghi lệnh chạy chính xác khi framework được thiết lập. Với vertical slice MVP, xác nhận luồng query từ Silver Parquet qua DuckDB/Ibis và API tới dashboard JSON.
+Kiểm thử dùng Python `unittest`. Bổ sung kiểm thử hành vi cùng phần triển khai, gồm regression cho bug fix. Với vertical slice MVP, xác nhận luồng query từ Silver Parquet qua DuckDB/Ibis và API tới dashboard JSON.
 
 ## Commit và Pull Request
 

@@ -8,14 +8,14 @@ Tài liệu nền:
 
 - [Architecture](ARCHITECTURE.md): kiến trúc mục tiêu, API/MCP, dashboard JSON và phạm vi MVP.
 - [Silver Data Catalog](SILVER_DATA_CATALOG.md): inventory, schema, grain, lineage và giới hạn dữ liệu theo snapshot 2026-10-03.
-- [FastAPI](API.md): cách chạy API, routes, request/response và error status hiện triển khai.
+- [FastAPI and MCP](API.md): cách chạy API/MCP, transports, request/response và error status hiện triển khai.
 - [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md): metric coverage, filter applicability, null/currency behavior, JSON contract mẫu và acceptance criteria SOF-69.
 
 ## Trạng thái hiện tại
 
 Python Core đã có kết nối Silver read-only qua DuckDB/Ibis, semantic registry cho các dataset production trong Catalog, `finance_daily`, và shared Query Service có validation cho model/metric/dimension/filter/date range. Semantic definitions hiện có ở `src/sora_semantic/semantic/models/datasets.py` và `finance.py`; danh sách theo model lấy từ registry, còn Architecture mô tả target semantic contract rộng hơn.
 
-Đã có FastAPI routes cho apps, metric/dimension metadata, shared query service và dashboard JSON config; implementation ở `src/sora_semantic/api.py`, cấu hình ban đầu ở `dashboard/config/ua_app_overview.json`, hướng dẫn trong [FastAPI](API.md). `tests/test_api.py` và `tests/test_query.py` bao phủ ASGI routes và registry-backed query. Live RustFS API smoke test đã đọc 20 apps và 4 finance rows cho 2026-09-30 đến 2026-10-03; đây chỉ xác nhận snapshot lúc chạy, không phải freshness/retention guarantee. MCP tools và Dashboard UI chưa có. Authorization được defer khỏi phase hiện tại. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
+Đã có FastAPI routes cho apps, metric/dimension metadata, shared query service và dashboard JSON config; cấu hình ban đầu ở `dashboard/config/ua_app_overview.json`. FastMCP cung cấp `list_apps`, `list_metrics` và `query_metrics` qua `stdio` và `Streamable HTTP`, dùng chung `SemanticRegistry`/`QueryService`; hướng dẫn chạy và contract ở [FastAPI and MCP](API.md). Tests bao phủ API, query và hai MCP transports. Live RustFS API smoke test trước đó đã đọc 20 apps và 4 finance rows cho 2026-09-30 đến 2026-10-03; đó là snapshot lúc chạy, không phải freshness/retention guarantee. Dashboard UI chưa có. Authentication/Authorization được loại khỏi phạm vi hiện tại. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
 
 ## Hợp đồng dữ liệu cần giữ
 
@@ -43,27 +43,25 @@ ga4_daily_overview
   → React dynamic renderer
 ```
 
-Đã triển khai shared Query Service, model-backed semantic registry và FastAPI apps/metadata/query/dashboard-config routes. Authorization được defer; MCP và Dashboard UI còn lại. SOF-69 API dùng contract UA Marketing Dashboard trong [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md); UI chưa được triển khai.
+Đã triển khai shared Query Service, model-backed semantic registry, FastAPI apps/metadata/query/dashboard-config routes và SOF-70 MCP tools. SOF-69 API dùng contract UA Marketing Dashboard trong [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md); Dashboard UI chưa được triển khai. Authentication/Authorization bị loại khỏi phạm vi hiện tại.
 
 Bắt đầu với metrics GA4 có nguồn rõ ràng, như `active_users` (đặt tên API theo semantic contract được chốt), `new_users` và `sessions`; giữ riêng `ga4_total_revenue` với currency implicit cho đến khi có policy. Chỉ thêm metrics khi source mapping, grain, null behavior và currency semantics đã được xác nhận.
 
-Dashboard MVP hỗ trợ widget `metric`, `area_chart`, `bar_chart`, `table`. Dashboard được cấu hình bằng JSON; thêm dashboard mới không cần tạo React page riêng. API và MCP phải dùng chung Query Service và Authorization. MCP MVP: `list_apps`, `list_metrics`, `query_metrics`.
+Dashboard MVP hỗ trợ widget `metric`, `area_chart`, `bar_chart`, `table`. Dashboard được cấu hình bằng JSON; thêm dashboard mới không cần tạo React page riêng. API và MCP dùng chung Query Service. MCP MVP: `list_apps`, `list_metrics`, `query_metrics`.
 
 Ngoài phạm vi MVP: ETL, Gold Layer, dashboard drag/drop editor, custom SQL editor, complex SQL lineage, Spark, Kafka, Cube và Malloy. SQLGlot chỉ thêm nếu phát sinh nhu cầu cụ thể về raw SQL guard hoặc lineage.
 
 ## Thứ tự triển khai đề xuất
 
-1. Tiếp tục API `POST /api/v1/query`, thêm Authorization dùng chung và giới hạn app theo context.
-2. Bổ sung MCP tools dùng chung Query Service và Authorization.
-3. Tạo dashboard JSON App Overview tối giản và dynamic renderer cho bốn widget MVP.
-4. Xác nhận end-to-end từ Silver tới dashboard bằng môi trường đã cấu hình; ghi rõ phần nào được xác nhận.
-5. Sau khi contract ổn định, mở rộng roles, tools và dashboard theo nhu cầu.
+1. Tạo dashboard JSON App Overview tối giản và dynamic renderer cho bốn widget MVP.
+2. Xác nhận end-to-end từ Silver tới dashboard bằng môi trường đã cấu hình; ghi rõ phần nào được xác nhận.
+3. Sau khi contract ổn định, mở rộng tools và dashboard theo nhu cầu.
 
 ## Tiêu chí hoàn tất MVP
 
 - Query chỉ đọc Silver và trả kết quả qua shared Query Service.
 - Metric/dimension/filter không có trong registry bị từ chối rõ ràng.
-- Authorization giới hạn app áp dụng giống nhau cho API và MCP; không thể vượt giới hạn bằng filter tự gửi.
+- API và MCP chỉ expose các semantic model/fields đã đăng ký; không cung cấp raw SQL.
 - Kết quả giữ currency và semantics nguồn; không cộng các amount khác currency.
 - Dashboard JSON render được Metric, Area Chart, Bar Chart và Table; dashboard mới không cần React page mới.
 - Có bằng chứng validation end-to-end; ghi riêng kiểm tra chưa chạy hoặc còn phụ thuộc RustFS/secrets.

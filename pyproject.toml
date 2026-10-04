@@ -5,6 +5,7 @@ requires-python = ">=3.14"
 dependencies = [
     "boring-semantic-layer>=0.3.18",
     "fastapi>=0.142.2",
+    "fastmcp>=4.0.10",
     "ibis-framework[duckdb]>=11.0.0",
     "uvicorn>=0.54.0",
 ]

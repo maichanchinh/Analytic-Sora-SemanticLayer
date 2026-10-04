@@ -13,6 +13,7 @@ from sora_semantic.semantic.query import (
     QueryService,
 )
 from sora_semantic.semantic.registry import SemanticRegistry
+from test_support import ignore_known_ibis_duckdb_deprecation
 
 
 class LocalRegistry:
@@ -35,6 +36,11 @@ class InMemorySilverSource:
 
 
 class QueryServiceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        ignore_known_ibis_duckdb_deprecation()
+
     def setUp(self):
         self.backend = ibis.duckdb.connect()
         source = self.backend.create_table(
@@ -206,6 +212,11 @@ class QueryServiceTests(unittest.TestCase):
 
 
 class RegistryBackedQueryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        ignore_known_ibis_duckdb_deprecation()
+
     def setUp(self):
         self.backend = ibis.duckdb.connect()
         self.app_daily = self.backend.create_table(
