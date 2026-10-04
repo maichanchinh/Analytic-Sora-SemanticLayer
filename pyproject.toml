@@ -4,7 +4,9 @@ version = "1.0.0"
 requires-python = ">=3.14"
 dependencies = [
     "boring-semantic-layer>=0.3.18",
+    "fastapi>=0.142.2",
     "ibis-framework[duckdb]>=11.0.0",
+    "uvicorn>=0.54.0",
 ]
 
 [build-system]
@@ -17,4 +19,5 @@ packages = ["src/sora_semantic"]
 [dependency-groups]
 dev = [
     "hatchling>=1.32.4",
+    "httpx>=0.28.1",
 ]

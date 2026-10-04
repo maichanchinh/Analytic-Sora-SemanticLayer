@@ -8,12 +8,14 @@ Tài liệu nền:
 
 - [Architecture](ARCHITECTURE.md): kiến trúc mục tiêu, API/MCP, dashboard JSON và phạm vi MVP.
 - [Silver Data Catalog](SILVER_DATA_CATALOG.md): inventory, schema, grain, lineage và giới hạn dữ liệu theo snapshot 2026-10-03.
+- [FastAPI](API.md): cách chạy API, routes, request/response và error status hiện triển khai.
+- [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md): metric coverage, filter applicability, null/currency behavior, JSON contract mẫu và acceptance criteria SOF-69.
 
 ## Trạng thái hiện tại
 
 Python Core đã có kết nối Silver read-only qua DuckDB/Ibis, semantic registry cho các dataset production trong Catalog, `finance_daily`, và shared Query Service có validation cho model/metric/dimension/filter/date range. Semantic definitions hiện có ở `src/sora_semantic/semantic/models/datasets.py` và `finance.py`; danh sách theo model lấy từ registry, còn Architecture mô tả target semantic contract rộng hơn.
 
-Đã có `tests/test_query.py` cho Query Service và registry-backed query. Chưa có FastAPI endpoints, MCP tools hoặc dashboard source; chưa có end-to-end tới RustFS/dashboard được xác nhận trong lần bàn giao này. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
+Đã có FastAPI routes cho apps, metric/dimension metadata và shared query service; implementation ở `src/sora_semantic/api.py`, hướng dẫn trong [FastAPI](API.md). `tests/test_api.py` và `tests/test_query.py` bao phủ ASGI route và registry-backed query. Live RustFS API smoke test đã đọc 20 apps và 4 finance rows cho 2026-09-30 đến 2026-10-03; đây chỉ xác nhận snapshot lúc chạy, không phải freshness/retention guarantee. MCP tools và Dashboard UI chưa có. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
 
 ## Hợp đồng dữ liệu cần giữ
 
@@ -41,7 +43,7 @@ ga4_daily_overview
   → React dynamic renderer
 ```
 
-Đã triển khai tới shared Query Service và model-backed semantic registry. API, Authorization, MCP và dashboard còn lại.
+Đã triển khai shared Query Service, model-backed semantic registry và FastAPI query/metadata routes. Authorization, MCP, Dashboard UI và dashboard JSON endpoints còn lại. SOF-69 API dùng contract UA Marketing Dashboard trong [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md); UI chưa được triển khai.
 
 Bắt đầu với metrics GA4 có nguồn rõ ràng, như `active_users` (đặt tên API theo semantic contract được chốt), `new_users` và `sessions`; giữ riêng `ga4_total_revenue` với currency implicit cho đến khi có policy. Chỉ thêm metrics khi source mapping, grain, null behavior và currency semantics đã được xác nhận.
 
