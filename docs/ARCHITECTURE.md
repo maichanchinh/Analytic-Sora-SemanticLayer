@@ -11,14 +11,17 @@ Xây dựng analytics layer độc lập trên dữ liệu Silver từ Sora. H�
 ```text
 backend/                 Python project: FastAPI, FastMCP, semantic layer, Silver reader
   src/sora_semantic/      Importable backend package
-  scripts/                Local API/MCP launchers
+  api.py, mcp.py           Local API/MCP launchers (`uv run api.py`, `uv run mcp.py`)
+  .envrc                   Shared env + backend-local env
   tests/                  Backend tests
   dashboard/config/       Dashboard JSON definitions served by the API
 dashboard/                Independent TypeScript/Next.js application
+.envrc                    Root shared environment loader
+.env.shared.example       Safe shared variable template
 docs/                     Architecture, data contract, and API documentation
 ```
 
-FastAPI and FastMCP remain interfaces of one backend project and share the semantic query service. The Dashboard is a separate application that consumes the API. Dashboard JSON definitions remain under `backend/dashboard/config/` because the backend currently serves them through `/api/v1/dashboards`.
+FastAPI and FastMCP remain interfaces of one backend project and share the semantic query service. The Dashboard is a separate application that consumes the API. Dashboard JSON definitions remain under `backend/dashboard/config/` because the backend currently serves them through `/api/v1/dashboards`. `direnv` loads `.env.shared` at repo root and combines it with each app's `.env.local`; secrets remain app-local.
 
 ```mermaid
 flowchart TB
@@ -439,7 +442,8 @@ Sora-SemanticLayer/
 │   └── tests/
 ├── dashboard/                 # Next.js/TypeScript application
 ├── docs/
-├── .env.example
+├── .envrc
+├── .env.shared.example
 └── README.md
 ```
 

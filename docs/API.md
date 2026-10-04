@@ -2,11 +2,11 @@
 
 ## Chạy local
 
-API dùng cùng cấu hình Silver S3-compatible với `SilverDataSource`. Theo [Silver Connection](SILVER_CONNECTION.md), đặt cấu hình trong `.env` ở repository root, rồi chạy các lệnh từ `backend/`:
+API dùng cùng cấu hình Silver S3-compatible với `SilverDataSource`. Tạo `backend/.env.local` từ `backend/.env.example`; direnv nạp biến khi vào thư mục `backend/`:
 
 ```sh
-uv sync --all-groups
-uv run --env-file ../.env python scripts/run_api.py
+cd backend && uv sync --all-groups
+uv run api.py
 ```
 
 Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
@@ -16,13 +16,13 @@ uv run --env-file ../.env python scripts/run_api.py
 MCP dùng cùng `SemanticRegistry` và `QueryService`, mở kết nối Silver read-only riêng theo lifespan của server. Có thể chạy local qua `stdio`:
 
 ```sh
-uv run --env-file ../.env python scripts/run_mcp.py
+cd backend && uv run mcp.py
 ```
 
 Hoặc chạy server `Streamable HTTP` tại `/mcp`:
 
 ```sh
-uv run --env-file ../.env python scripts/run_mcp.py --transport streamable-http
+cd backend && uv run mcp.py --transport streamable-http
 ```
 
 Hai lệnh dùng cùng biến môi trường Silver như API. MCP cung cấp `list_apps`, `list_metrics` và `query_metrics`; tool query nhận `model`, `metrics`, `dimensions`, `filters` và `date_range` theo shared `QueryRequest`. Kết quả dùng shape `model`, `dimensions`, `metrics`, `rows`; query contract lỗi được trả dưới dạng MCP tool error. Không có raw SQL tool.
@@ -120,6 +120,5 @@ API expose apps, semantic metadata, query và dashboard JSON config. MCP expose 
 Chạy toàn bộ automated tests (gồm MCP `stdio` và `Streamable HTTP` smoke tests) bằng:
 
 ```sh
-cd backend
-uv run python -m unittest discover -s tests -v
+cd backend && uv run python -m unittest discover -s tests -v
 ```

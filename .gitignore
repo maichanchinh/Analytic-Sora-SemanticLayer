@@ -19,6 +19,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.shared.example
 
 # Next.js / Node.js
 node_modules/

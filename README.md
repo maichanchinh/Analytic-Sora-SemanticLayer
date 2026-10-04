@@ -8,31 +8,53 @@ Tài liệu: [Architecture](docs/ARCHITECTURE.md), [Silver Data Catalog](docs/SI
 
 - Python 3.14
 - [`uv`](https://docs.astral.sh/uv/)
+- [`direnv`](https://direnv.net/) with zsh hook enabled
 - Credential RustFS chỉ có quyền đọc Silver để chạy API/MCP với dữ liệu thật
 
 ## Cài đặt và cấu hình
 
-Backend nằm trong `backend/`; Dashboard TypeScript nằm trong `dashboard/`. Cài dependencies Python từ thư mục backend:
+Backend nằm trong `backend/`; Dashboard TypeScript sẽ nằm trong `dashboard/`. `direnv` hiện được cấu hình bằng `.envrc` ở root và từng app. Tạo các file local từ mẫu:
+
+Trên macOS/zsh, cài `direnv` bằng Homebrew nếu máy chưa có; bảo đảm `eval "$(direnv hook zsh)"` nằm trong `~/.zshrc`, rồi mở shell mới:
+
+```sh
+brew install direnv
+```
+
+```sh
+cp -n .env.shared.example .env.shared
+cp -n backend/.env.example backend/.env.local
+cp -n dashboard/.env.example dashboard/.env.local
+```
+
+`.env.shared` chỉ dành cho biến an toàn, thật sự dùng chung. Biến riêng và credential Silver để trong `backend/.env.local`; config riêng Dashboard để trong `dashboard/.env.local`. Các file local đã bị Git ignore. Không đưa secret backend vào biến `NEXT_PUBLIC_*`.
+
+Cho phép `direnv` đọc các `.envrc` đã review, mỗi thư mục một lần:
+
+```sh
+direnv allow .
+direnv allow backend
+direnv allow dashboard
+cd ..
+```
+
+`.envrc` root nạp shared env; `.envrc` mỗi app nạp shared trước và `.env.local` sau.
+
+Cài backend dependencies từ thư mục backend:
 
 ```sh
 cd backend
 uv sync --all-groups
 ```
 
-Tạo file cấu hình local ở repository root:
-
-```sh
-cp ../.env.example ../.env
-```
-
-Điền đủ bảy biến `APP_CONFIG__S3__SILVER__*` trong `.env` bằng endpoint, bucket, region và credential read-only của RustFS. Không commit file `.env` hoặc chia sẻ giá trị credential. Ứng dụng không tự đọc `.env`; các lệnh bên dưới dùng `uv run --env-file ../.env` để nạp cấu hình vào process.
+Điền bảy biến `APP_CONFIG__S3__SILVER__*` trong `backend/.env.local` bằng endpoint, bucket, region và credential read-only của RustFS.
 
 ## Chạy API
 
 Khởi động API trên `127.0.0.1:8000`:
 
 ```sh
-uv run --env-file ../.env python scripts/run_api.py
+cd backend && uv run api.py
 ```
 
 Trong terminal khác, kiểm tra kết nối Silver và endpoint apps:
@@ -48,13 +70,13 @@ API hiện chưa có authentication; chỉ expose trong mạng nội bộ đư�
 Kết nối qua `stdio` khi MCP client khởi chạy server process:
 
 ```sh
-uv run --env-file ../.env python scripts/run_mcp.py
+cd backend && uv run mcp.py
 ```
 
 Hoặc khởi chạy MCP qua `Streamable HTTP` tại `http://127.0.0.1:8001/mcp`:
 
 ```sh
-uv run --env-file ../.env python scripts/run_mcp.py --transport streamable-http
+cd backend && uv run mcp.py --transport streamable-http
 ```
 
 MCP tools gồm `list_apps`, `list_metrics`, `query_metrics`. Authorization và app scope chưa được triển khai; giữ HTTP server trong network boundary phù hợp.
@@ -64,7 +86,7 @@ MCP tools gồm `list_apps`, `list_metrics`, `query_metrics`. Authorization và 
 Tests dùng Silver giả lập và không cần `.env` hoặc kết nối RustFS:
 
 ```sh
-uv run python -m unittest discover -s tests -v
+cd backend && uv run python -m unittest discover -s tests -v
 ```
 
-Chạy lệnh test từ `backend/`.
+Các lệnh API/MCP/Test chạy từ `backend/`; sau khi direnv load env, không cần `--env-file`.
