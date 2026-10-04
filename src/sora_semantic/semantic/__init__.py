@@ -8,6 +8,13 @@ from sora_semantic.semantic.models import (
     FinanceDailyDefinition,
     SilverSemanticDefinition,
 )
+from sora_semantic.semantic.query import (
+    DateRange,
+    QueryContractError,
+    QueryRequest,
+    QueryResult,
+    QueryService,
+)
 from sora_semantic.semantic.registry import SemanticRegistry
 
 __all__ = [
@@ -15,6 +22,11 @@ __all__ = [
     "FINANCE_DAILY_DEFINITION",
     "FinanceDailyDefinition",
     "MetricDefinition",
+    "DateRange",
+    "QueryContractError",
+    "QueryRequest",
+    "QueryResult",
+    "QueryService",
     "SemanticRegistry",
     "SILVER_SEMANTIC_DEFINITIONS",
     "SilverSemanticDefinition",

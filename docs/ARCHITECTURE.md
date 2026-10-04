@@ -142,13 +142,12 @@ Dashboard và MCP dùng chung Query Service. Request biểu diễn metrics, dime
 
 ```json
 {
-  "metrics": ["revenue_usd", "cost_usd", "profit_usd", "roas_usd", "revenue_vnd", "cost_vnd"],
-  "dimensions": [
-    "date"
-  ],
+  "model": "finance_daily",
+  "metrics": ["revenue_usd", "cost_usd", "profit_usd", "roas_usd"],
+  "dimensions": ["business_date", "app_id", "country_code"],
   "filters": {
-    "app": ["blur_face"],
-    "country": ["US"]
+    "app_id": ["blur_face"],
+    "country_code": "US"
   },
   "date_range": {
     "from": "2026-09-01",
@@ -156,6 +155,8 @@ Dashboard và MCP dùng chung Query Service. Request biểu diễn metrics, dime
   }
 }
 ```
+
+`model` chọn đúng một semantic definition; query không tự join nhiều model. Filter chỉ nhận dimension với giá trị scalar (equality) hoặc list (IN). `date_range` là tùy chọn, inclusive ở hai đầu và áp vào time dimension của model dù dimension đó không được trả trong kết quả. Service trả `model`, metadata dimensions/metrics cùng `rows` dạng list-of-dicts. Model, field, filter hoặc date range không hợp lệ trả contract error trước khi thực thi.
 
 Luồng xử lý query:
 
