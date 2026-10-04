@@ -2,10 +2,11 @@
 
 ## Chạy local
 
-API dùng cùng cấu hình Silver S3-compatible với `SilverDataSource`. Nạp các biến `APP_CONFIG__S3__SILVER__*` theo [Silver Connection](SILVER_CONNECTION.md), rồi chạy:
+API dùng cùng cấu hình Silver S3-compatible với `SilverDataSource`. Theo [Silver Connection](SILVER_CONNECTION.md), đặt cấu hình trong `.env` ở repository root, rồi chạy các lệnh từ `backend/`:
 
 ```sh
-uv run uvicorn sora_semantic.api:app --host 127.0.0.1 --port 8000
+uv sync --all-groups
+uv run --env-file ../.env python scripts/run_api.py
 ```
 
 Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
@@ -15,13 +16,13 @@ uv run uvicorn sora_semantic.api:app --host 127.0.0.1 --port 8000
 MCP dùng cùng `SemanticRegistry` và `QueryService`, mở kết nối Silver read-only riêng theo lifespan của server. Có thể chạy local qua `stdio`:
 
 ```sh
-uv run fastmcp run sora_semantic.mcp:mcp --transport stdio
+uv run --env-file ../.env python scripts/run_mcp.py
 ```
 
 Hoặc chạy server `Streamable HTTP` tại `/mcp`:
 
 ```sh
-uv run fastmcp run sora_semantic.mcp:mcp --transport streamable-http --host 127.0.0.1 --port 8001 --path /mcp
+uv run --env-file ../.env python scripts/run_mcp.py --transport streamable-http
 ```
 
 Hai lệnh dùng cùng biến môi trường Silver như API. MCP cung cấp `list_apps`, `list_metrics` và `query_metrics`; tool query nhận `model`, `metrics`, `dimensions`, `filters` và `date_range` theo shared `QueryRequest`. Kết quả dùng shape `model`, `dimensions`, `metrics`, `rows`; query contract lỗi được trả dưới dạng MCP tool error. Không có raw SQL tool.
@@ -98,7 +99,7 @@ Mỗi request chọn đúng một model; dimensions và metrics phải có trong
 
 ### `GET /api/v1/dashboards` và `GET /api/v1/dashboards/{id}`
 
-Config JSON được đọc read-only từ `dashboard/config/`. Danh sách chỉ trả `id` và `title`, sắp xếp theo `id`; endpoint chi tiết trả toàn bộ config.
+Config JSON được đọc read-only từ `backend/dashboard/config/`. Danh sách chỉ trả `id` và `title`, sắp xếp theo `id`; endpoint chi tiết trả toàn bộ config.
 
 ```json
 {
@@ -119,5 +120,6 @@ API expose apps, semantic metadata, query và dashboard JSON config. MCP expose 
 Chạy toàn bộ automated tests (gồm MCP `stdio` và `Streamable HTTP` smoke tests) bằng:
 
 ```sh
+cd backend
 uv run python -m unittest discover -s tests -v
 ```

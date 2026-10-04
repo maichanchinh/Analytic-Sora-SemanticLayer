@@ -2,11 +2,11 @@
 
 ## Cấu trúc dự án
 
-Python Core nằm trong `src/sora_semantic/`, dashboard JSON trong `dashboard/config/`, kiểm thử Python trong `tests/`. Chi tiết thành phần và luồng dữ liệu nằm trong [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Backend Python nằm trong `backend/`: package ở `backend/src/sora_semantic/`, launcher ở `backend/scripts/`, tests ở `backend/tests/`, dashboard JSON do API phục vụ ở `backend/dashboard/config/`. Dashboard TypeScript là ứng dụng riêng tại `dashboard/`. Chi tiết thành phần và luồng dữ liệu nằm trong [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Phát triển và kiểm thử
 
-Quản lý dependencies bằng `uv` trên Python 3.14. Các lệnh chuẩn được ghi ở đây và trong [README.md](README.md). Chạy automated tests:
+Quản lý dependencies bằng `uv` trên Python 3.14; chạy các lệnh backend từ thư mục `backend/`. Hướng dẫn chạy API/MCP nằm trong [README.md](README.md) và [docs/API.md](docs/API.md). Chạy automated tests:
 
 ```sh
 uv run python -m unittest discover -s tests -v

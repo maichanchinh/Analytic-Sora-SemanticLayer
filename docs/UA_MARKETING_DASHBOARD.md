@@ -4,7 +4,7 @@
 
 Dashboard này hỗ trợ quyết định UA cho từng app: theo dõi chi phí acquisition, doanh thu quảng cáo, ROAS, retention và chất lượng traffic/campaign. Contract được đối chiếu với semantic registry hiện có và Silver Data Catalog snapshot ngày 2026-10-03.
 
-Đây là metric/filter contract cho SOF-69. API FastAPI expose metadata, shared query và dashboard-config endpoints; config ban đầu ở `dashboard/config/ua_app_overview.json`. Repo chưa có Dashboard UI. Chỉ dùng các metric/dimension đã đăng ký. Không tạo ETL, không đọc `staging/`, không sửa Silver và không tự tính metric từ raw SQL.
+Đây là metric/filter contract cho SOF-69. API FastAPI expose metadata, shared query và dashboard-config endpoints; config ban đầu ở `backend/dashboard/config/ua_app_overview.json`. Repo chưa có Dashboard UI. Chỉ dùng các metric/dimension đã đăng ký. Không tạo ETL, không đọc `staging/`, không sửa Silver và không tự tính metric từ raw SQL.
 
 ## Số liệu cần hiển thị
 
@@ -96,4 +96,4 @@ Query Service nhận một model cho mỗi query, date range inclusive, filter s
 
 ## Kiểm thử khi có runtime
 
-Khi mở rộng API/UI, dùng fixture có kết quả biết trước để xác nhận từng nhóm metric, filter chung và cục bộ, kỳ ngày inclusive, aggregation ROAS, null/FX, campaign micros, retention D1/D7/D30, filter không hỗ trợ và query lỗi. API routes hiện được kiểm thử bằng fixture DuckDB trong `tests/test_api.py`; chạy smoke test đọc Silver RustFS khi cấu hình runtime có sẵn và báo riêng kết quả RustFS. UI chưa có runtime để kiểm thử.
+Khi mở rộng API/UI, dùng fixture có kết quả biết trước để xác nhận từng nhóm metric, filter chung và cục bộ, kỳ ngày inclusive, aggregation ROAS, null/FX, campaign micros, retention D1/D7/D30, filter không hỗ trợ và query lỗi. API routes hiện được kiểm thử bằng fixture DuckDB trong `backend/tests/test_api.py`; chạy smoke test đọc Silver RustFS khi cấu hình runtime có sẵn và báo riêng kết quả RustFS. UI chưa có runtime để kiểm thử.

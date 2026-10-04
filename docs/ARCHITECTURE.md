@@ -6,6 +6,20 @@ Xây dựng analytics layer độc lập trên dữ liệu Silver từ Sora. H�
 
 ## 2. Architecture
 
+### Repository layout
+
+```text
+backend/                 Python project: FastAPI, FastMCP, semantic layer, Silver reader
+  src/sora_semantic/      Importable backend package
+  scripts/                Local API/MCP launchers
+  tests/                  Backend tests
+  dashboard/config/       Dashboard JSON definitions served by the API
+dashboard/                Independent TypeScript/Next.js application
+docs/                     Architecture, data contract, and API documentation
+```
+
+FastAPI and FastMCP remain interfaces of one backend project and share the semantic query service. The Dashboard is a separate application that consumes the API. Dashboard JSON definitions remain under `backend/dashboard/config/` because the backend currently serves them through `/api/v1/dashboards`.
+
 ```mermaid
 flowchart TB
     Dashboard[Next.js Dashboard] --> API[FastAPI]
@@ -346,10 +360,10 @@ Dashboard mới chỉ cần JSON config; không cần viết React page mới.
 
 ## 12. Dashboard Config Storage
 
-MVP lưu cấu hình trong `dashboard/config/*.json`:
+MVP lưu cấu hình backend phục vụ trong `backend/dashboard/config/*.json`:
 
 ```text
-dashboard/config/
+backend/dashboard/config/
 ├── app-overview.json
 ├── monetization.json
 ├── acquisition.json
@@ -408,56 +422,25 @@ Cohort Heatmap
 
 ## 14. Project Structure
 
-Đây là cấu trúc mục tiêu của repo:
+Đây là cấu trúc repo hiện tại và ranh giới ứng dụng:
 
 ```text
 Sora-SemanticLayer/
-│
-├── pyproject.toml
-├── uv.lock
-│
-├── src/
-│   └── sora_semantic/
-│       ├── config/
-│       │
-│       ├── data/
-│       │   ├── duckdb.py
-│       │   ├── ibis.py
-│       │   └── rustfs.py
-│       │
-│       ├── semantic/
-│       │   ├── registry.py
-│       │   ├── dimensions.py
-│       │   ├── metrics.py
-│       │   └── models/
-│       │
-│       ├── query/
-│       │   ├── service.py
-│       │   └── models.py
-│       │
-│       ├── auth/
-│       │
-│       ├── api/
-│       │
-│       └── mcp/
-│
-├── dashboard/
-│   ├── config/
-│   │   ├── app-overview.json
-│   │   ├── monetization.json
-│   │   └── retention.json
-│   │
-│   └── src/
-│       ├── components/
-│       │   └── dashboard/
-│       │       ├── DashboardRenderer.tsx
-│       │       ├── WidgetRenderer.tsx
-│       │       └── widgets/
-│       │
-│       ├── app/
-│       └── lib/
-│
-└── tests/
+├── backend/
+│   ├── pyproject.toml
+│   ├── uv.lock
+│   ├── scripts/
+│   ├── src/sora_semantic/
+│   │   ├── api.py
+│   │   ├── mcp.py
+│   │   ├── data/
+│   │   └── semantic/
+│   ├── dashboard/config/
+│   └── tests/
+├── dashboard/                 # Next.js/TypeScript application
+├── docs/
+├── .env.example
+└── README.md
 ```
 
 ## 15. MVP
