@@ -11,7 +11,9 @@ Tài liệu nền:
 
 ## Trạng thái hiện tại
 
-Repo hiện chỉ có tài liệu và cấu hình hướng dẫn (`AGENTS.md`); chưa có Python Core, dashboard source, dependency/toolchain hoặc test suite. Chưa có build, lint hay runtime validation nào để bàn giao. Git repo chưa có commit lịch sử; tài liệu hiện nằm trong working tree.
+Python Core đã có kết nối Silver read-only qua DuckDB/Ibis, semantic registry cho các dataset production trong Catalog, `finance_daily`, và shared Query Service có validation cho model/metric/dimension/filter/date range. Semantic definitions hiện có ở `src/sora_semantic/semantic/models/datasets.py` và `finance.py`; danh sách theo model lấy từ registry, còn Architecture mô tả target semantic contract rộng hơn.
+
+Đã có `tests/test_query.py` cho Query Service và registry-backed query. Chưa có FastAPI endpoints, MCP tools hoặc dashboard source; chưa có end-to-end tới RustFS/dashboard được xác nhận trong lần bàn giao này. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
 
 ## Hợp đồng dữ liệu cần giữ
 
@@ -28,7 +30,7 @@ Repo hiện chỉ có tài liệu và cấu hình hướng dẫn (`AGENTS.md`); 
 
 ## Phạm vi MVP
 
-Vertical slice đầu tiên:
+Vertical slice mục tiêu:
 
 ```text
 ga4_daily_overview
@@ -39,6 +41,8 @@ ga4_daily_overview
   → React dynamic renderer
 ```
 
+Đã triển khai tới shared Query Service và model-backed semantic registry. API, Authorization, MCP và dashboard còn lại.
+
 Bắt đầu với metrics GA4 có nguồn rõ ràng, như `active_users` (đặt tên API theo semantic contract được chốt), `new_users` và `sessions`; giữ riêng `ga4_total_revenue` với currency implicit cho đến khi có policy. Chỉ thêm metrics khi source mapping, grain, null behavior và currency semantics đã được xác nhận.
 
 Dashboard MVP hỗ trợ widget `metric`, `area_chart`, `bar_chart`, `table`. Dashboard được cấu hình bằng JSON; thêm dashboard mới không cần tạo React page riêng. API và MCP phải dùng chung Query Service và Authorization. MCP MVP: `list_apps`, `list_metrics`, `query_metrics`.
@@ -47,13 +51,11 @@ Ngoài phạm vi MVP: ETL, Gold Layer, dashboard drag/drop editor, custom SQL ed
 
 ## Thứ tự triển khai đề xuất
 
-1. Khởi tạo Python Core và toolchain đã thống nhất trong architecture; ghi lệnh phát triển chuẩn vào `AGENTS.md`.
-2. Cấu hình DuckDB đọc thử Silver Parquet từ RustFS bằng cấu hình runtime/secrets ngoài Git.
-3. Thêm một dataset GA4, semantic registry nhỏ và QueryRequest/QueryResult có validation cho metric, dimension, filter và date range.
-4. Thêm Query Service, giới hạn app theo Authorization context và `POST /api/v1/query`.
-5. Tạo một dashboard JSON App Overview tối giản và dynamic renderer cho bốn widget MVP.
-6. Xác nhận end-to-end từ Silver tới dashboard bằng dữ liệu thật hoặc môi trường tích hợp đã cấu hình; ghi rõ phần nào được xác nhận.
-7. Sau khi contract ổn định, mở rộng dataset/metrics, Authorization roles, MCP tools và các dashboard khác.
+1. Tiếp tục API `POST /api/v1/query`, thêm Authorization dùng chung và giới hạn app theo context.
+2. Bổ sung MCP tools dùng chung Query Service và Authorization.
+3. Tạo dashboard JSON App Overview tối giản và dynamic renderer cho bốn widget MVP.
+4. Xác nhận end-to-end từ Silver tới dashboard bằng môi trường đã cấu hình; ghi rõ phần nào được xác nhận.
+5. Sau khi contract ổn định, mở rộng roles, tools và dashboard theo nhu cầu.
 
 ## Tiêu chí hoàn tất MVP
 
@@ -66,4 +68,4 @@ Ngoài phạm vi MVP: ETL, Gold Layer, dashboard drag/drop editor, custom SQL ed
 
 ## Ghi chú bắt đầu cho nhóm nhận bàn giao
 
-Trước khi code, đọc Architecture và Silver Data Catalog, sau đó xác nhận kết nối RustFS/Silver và chọn đúng GA4 measure đầu tiên. `users` trong architecture hiện là tên metric dự kiến, không tự động đồng nghĩa với GA4 `active_users`; thống nhất semantic naming và null behavior trước khi public API. Không mở rộng thành revenue/profit/ROAS đa nguồn nếu chưa có quyết định currency và business definitions.
+Trước khi mở rộng metrics/dimensions, đọc Architecture và Silver Data Catalog rồi đối chiếu definitions theo model trong semantic registry. Không xem target list trong Architecture là danh sách đã bật đồng loạt: chỉ expose field có source mapping và semantics đã xác nhận. GA4 `active_users`/`new_users` có thể null khi nhiều property đóng góp; revenue GA4 giữ vai trò reference vì thiếu currency. Không mở rộng revenue/profit/ROAS đa nguồn nếu chưa có policy currency và business definitions.
