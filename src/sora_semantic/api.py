@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from threading import RLock
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 
 from sora_semantic.data.silver import SilverDataSource, SilverReadError
+from sora_semantic.dashboard_configs import (
+    DashboardConfigError,
+    DashboardConfigStore,
+    DashboardNotFoundError,
+)
 from sora_semantic.semantic.query import (
     QueryContractError,
     QueryRequest,
@@ -22,6 +28,7 @@ from sora_semantic.semantic.registry import SemanticRegistry
 def create_app(
     *,
     source_factory: Callable[[], SilverDataSource] = SilverDataSource.from_env,
+    dashboard_config_dir: Path | None = None,
 ) -> FastAPI:
     """Create the API app; source creation is deferred until ASGI startup."""
 
@@ -43,6 +50,7 @@ def create_app(
         version="1.0.0",
         lifespan=lifespan,
     )
+    app.state.dashboard_config_store = DashboardConfigStore(dashboard_config_dir)
 
     @app.get("/api/v1/apps")
     def list_apps(request: Request) -> dict[str, list[dict[str, Any]]]:
@@ -93,6 +101,29 @@ def create_app(
             "metrics": result.metrics,
             "rows": result.rows,
         }
+
+    @app.get("/api/v1/dashboards")
+    def list_dashboards(request: Request) -> dict[str, list[dict[str, str]]]:
+        try:
+            dashboards = request.app.state.dashboard_config_store.list()
+        except DashboardConfigError:
+            raise HTTPException(
+                status_code=500,
+                detail="Dashboard configs are unavailable.",
+            ) from None
+        return {"dashboards": dashboards}
+
+    @app.get("/api/v1/dashboards/{dashboard_id}")
+    def get_dashboard(dashboard_id: str, request: Request) -> dict[str, Any]:
+        try:
+            return request.app.state.dashboard_config_store.get(dashboard_id)
+        except DashboardNotFoundError:
+            raise HTTPException(status_code=404, detail="Dashboard not found.") from None
+        except DashboardConfigError:
+            raise HTTPException(
+                status_code=500,
+                detail="Dashboard config is unavailable.",
+            ) from None
 
     return app
 

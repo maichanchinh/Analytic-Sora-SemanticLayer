@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from datetime import date
 
@@ -9,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 
 from sora_semantic.api import create_app
 from sora_semantic.data.silver import SilverReadError
+from sora_semantic.semantic.registry import SemanticRegistry
 
 
 APP_ROWS = [
@@ -200,6 +203,78 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("private connection detail", response.text)
+
+    async def test_dashboard_list_and_detail_return_registry_backed_ua_config(self) -> None:
+        source = InMemorySilverSource()
+        async with api_client(create_app(source_factory=lambda: source)) as client:
+            listing = await client.get("/api/v1/dashboards")
+            detail = await client.get("/api/v1/dashboards/ua_app_overview")
+
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(
+            listing.json(),
+            {"dashboards": [{"id": "ua_app_overview", "title": "UA App Overview"}]},
+        )
+        self.assertEqual(detail.status_code, 200)
+        dashboard = detail.json()
+        definitions = {item["name"]: item for item in SemanticRegistry().describe()}
+        for widget in dashboard["widgets"]:
+            self.assertIn(widget["model"], definitions)
+            model = definitions[widget["model"]]
+            self.assertLessEqual(
+                set(widget.get("metrics", [])),
+                {item["name"] for item in model["metrics"]},
+            )
+            self.assertLessEqual(
+                set(widget.get("dimensions", [])),
+                {item["name"] for item in model["dimensions"]},
+            )
+
+    async def test_unknown_and_invalid_dashboard_ids_return_404(self) -> None:
+        source = InMemorySilverSource()
+        async with api_client(create_app(source_factory=lambda: source)) as client:
+            missing = await client.get("/api/v1/dashboards/unknown_dashboard")
+            invalid = await client.get("/api/v1/dashboards/invalid.id")
+
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(invalid.status_code, 404)
+        self.assertEqual(missing.json()["detail"], "Dashboard not found.")
+
+    async def test_invalid_dashboard_json_returns_sanitized_500(self) -> None:
+        source = InMemorySilverSource()
+        with TemporaryDirectory() as temporary_directory:
+            config_dir = Path(temporary_directory)
+            (config_dir / "broken.json").write_text("{invalid", encoding="utf-8")
+            (config_dir / "wrong_shape.json").write_text("[]", encoding="utf-8")
+            async with api_client(
+                create_app(
+                    source_factory=lambda: source,
+                    dashboard_config_dir=config_dir,
+                )
+            ) as client:
+                listing = await client.get("/api/v1/dashboards")
+                detail = await client.get("/api/v1/dashboards/broken")
+                wrong_shape = await client.get("/api/v1/dashboards/wrong_shape")
+
+        self.assertEqual(listing.status_code, 500)
+        self.assertEqual(listing.json()["detail"], "Dashboard configs are unavailable.")
+        self.assertEqual(detail.status_code, 500)
+        self.assertEqual(detail.json()["detail"], "Dashboard config is unavailable.")
+        self.assertEqual(wrong_shape.status_code, 500)
+
+    async def test_empty_dashboard_directory_returns_empty_list(self) -> None:
+        source = InMemorySilverSource()
+        with TemporaryDirectory() as temporary_directory:
+            async with api_client(
+                create_app(
+                    source_factory=lambda: source,
+                    dashboard_config_dir=Path(temporary_directory),
+                )
+            ) as client:
+                response = await client.get("/api/v1/dashboards")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"dashboards": []})
 
 
 if __name__ == "__main__":

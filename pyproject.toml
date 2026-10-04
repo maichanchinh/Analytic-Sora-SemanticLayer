@@ -16,6 +16,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sora_semantic"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"dashboard/config" = "sora_semantic/dashboard/config"
+
 [dependency-groups]
 dev = [
     "hatchling>=1.32.4",

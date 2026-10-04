@@ -78,6 +78,20 @@ Mỗi request chọn đúng một model; dimensions và metrics phải có trong
 }
 ```
 
+### `GET /api/v1/dashboards` và `GET /api/v1/dashboards/{id}`
+
+Config JSON được đọc read-only từ `dashboard/config/`. Danh sách chỉ trả `id` và `title`, sắp xếp theo `id`; endpoint chi tiết trả toàn bộ config.
+
+```json
+{
+  "dashboards": [
+    {"id": "ua_app_overview", "title": "UA App Overview"}
+  ]
+}
+```
+
+ID không hợp lệ hoặc không có config trả `404`. Config không đọc được hoặc sai cấu trúc trả `500` với thông báo đã làm sạch. Config ban đầu là `ua_app_overview`; metric/dimension trong widget được đối chiếu với semantic registry bằng API tests.
+
 ## Phạm vi hiện tại
 
-API expose apps, semantic metadata và query. Dashboard UI, dashboard JSON endpoints, authentication và CORS chưa được triển khai.
+API expose apps, semantic metadata, query và dashboard JSON config. Dashboard UI, authentication và CORS chưa được triển khai trong phase này.

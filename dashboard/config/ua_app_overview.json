@@ -1,0 +1,69 @@
+{
+  "id": "ua_app_overview",
+  "title": "UA App Overview",
+  "filters": ["date_range", "app_id", "country_code"],
+  "widgets": [
+    {
+      "id": "financial_kpis_usd",
+      "type": "metric",
+      "title": "Financial KPIs (USD)",
+      "model": "finance_daily",
+      "metrics": ["revenue_usd", "cost_usd", "profit_usd", "roas_usd"]
+    },
+    {
+      "id": "financial_kpis_vnd",
+      "type": "metric",
+      "title": "Financial KPIs (VND)",
+      "model": "finance_daily",
+      "metrics": ["revenue_vnd", "cost_vnd", "profit_vnd", "roas_vnd"]
+    },
+    {
+      "id": "financial_trend_usd",
+      "type": "area_chart",
+      "title": "Revenue and Spend (USD)",
+      "model": "finance_daily",
+      "metrics": ["revenue_usd", "cost_usd"],
+      "dimensions": ["business_date"]
+    },
+    {
+      "id": "campaign_spend",
+      "type": "table",
+      "title": "Campaign Spend",
+      "model": "google_ads_campaign_geo_daily",
+      "metrics": ["campaign_spend"],
+      "dimensions": ["campaign_name", "country_code", "currency_code"]
+    },
+    {
+      "id": "ga4_engagement",
+      "type": "metric",
+      "title": "GA4 Engagement",
+      "model": "ga4_daily_overview",
+      "metrics": ["active_users", "new_users", "sessions", "engaged_sessions", "screen_page_views"]
+    },
+    {
+      "id": "admob_performance",
+      "type": "table",
+      "title": "AdMob Performance",
+      "model": "admob_mediation_daily",
+      "metrics": [
+        "estimated_earnings",
+        "impressions",
+        "clicks",
+        "ad_requests",
+        "matched_requests",
+        "impression_ctr",
+        "match_rate",
+        "observed_ecpm"
+      ],
+      "dimensions": ["business_date", "country_code", "currency_code"]
+    },
+    {
+      "id": "retention_by_cohort_day",
+      "type": "bar_chart",
+      "title": "Retention by Cohort Day",
+      "model": "ga4_retention_cohort",
+      "metrics": ["retention_rate"],
+      "dimensions": ["cohort_day"]
+    }
+  ]
+}
