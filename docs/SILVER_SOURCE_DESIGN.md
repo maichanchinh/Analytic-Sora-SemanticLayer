@@ -67,6 +67,10 @@ Không đọc prefix `staging/` như production data. Snapshot inventory và par
 
 `report.app_daily` dùng AdMob `estimated_earnings` làm `revenue` và Google Ads `cost_micros / 1,000,000` làm `cost`. Đây là report convention hiện tại, không phải định nghĩa cho semantic `revenue` chung. Chi tiết lineage và metric availability nằm trong catalog.
 
+SemanticLayer consumer tạo `finance_daily` từ `report/app_daily` và `fx_daily`; việc này không thay đổi Sora hoặc Silver. FX hiện chỉ cung cấp VND-to-USD (`rate` là USD trên một VND). Consumer dùng rate cùng ngày hoặc gần nhất trước đó, không giới hạn tuổi, đồng thời trả `fx_rate_date` và `fx_fallback_used`. Nếu chưa có rate trước business date, amount chuyển đổi là null. Currency ngoài USD/VND vẫn ở native unit và bị loại khỏi USD/VND totals.
+
+Finance outputs hiện dùng AdMob revenue và Google Ads cost có trong `app_daily`. Google Play subscription/IAP net revenue, TikTok cost và installs-by-source chưa có Silver schemas nên chưa được expose. Google Ads CPI chỉ dùng conversions được xác nhận là app installs; generic conversions không đại diện installs. GA4 `total_revenue` và `purchase_revenue` chỉ là reference, không đóng góp vào canonical revenue.
+
 ## Partition completeness và manifest
 
 Mỗi build ngày publish manifest tại `metadata/silver_build/date=YYYY-MM-DD/manifest.json`, gồm `business_date`, `trigger_sources`, `failed_sources`, `source_status` và `built_at`. `source_status` lưu ngày Bronze được chọn và trạng thái `fresh`, `stale` hoặc `missing` cho từng source. Nếu partition nguồn cho ngày build thiếu, Sora đăng ký input rỗng để các source khác vẫn có thể publish; nếu dùng Bronze cũ nhất sẵn có không muộn hơn ngày build, trạng thái được đánh dấu stale.

@@ -90,19 +90,25 @@ users
 new_users
 sessions
 
-revenue
-ad_revenue
-purchase_revenue
+admob_revenue_native
+ga4_total_revenue_reference
+google_ads_cost_native
 
-ad_spend
-profit
-roas
+revenue_usd
+revenue_vnd
+cost_usd
+cost_vnd
+profit_usd
+profit_vnd
+roas_usd
+roas_vnd
 
 impressions
 clicks
-installs
+installs_by_source
 
-cpi
+cpi_google_ads_usd
+cpi_google_ads_vnd
 ctr
 ecpm
 
@@ -114,14 +120,21 @@ retention_d30
 Derived metrics được tính trong semantic layer, không lưu vào Silver:
 
 ```text
-profit = revenue - ad_spend
-roas = revenue / ad_spend
-cpi = ad_spend / installs
+profit_usd = revenue_usd - cost_usd
+profit_vnd = revenue_vnd - cost_vnd
+roas_usd = revenue_usd / cost_usd
+roas_vnd = revenue_vnd / cost_vnd
+cpi_google_ads_usd = google_ads_cost_usd / google_ads_installs
+cpi_google_ads_vnd = google_ads_cost_vnd / google_ads_installs
 ```
 
-Đây là công thức mục tiêu, không có nghĩa mọi đầu vào hiện đã tồn tại hoặc có thể gộp an toàn. Silver hiện không có `installs`, `app_version`, `ad_source` hoặc `ad_unit`; do đó chưa hỗ trợ tương ứng `cpi` và các dimension đó. GA4 `total_revenue` không có currency field, trong khi AdMob earnings và Google Ads cost có currency riêng. Không gộp chúng thành `revenue`/`profit` chung hoặc tính ROAS xuyên currency nếu chưa có quy tắc nghiệp vụ và conversion policy. `fx_daily` hiện chưa được Sora dùng để quy đổi `report/app_daily`.
+Canonical revenue chỉ lấy AdMob `estimated_earnings` và Google Play subscription/IAP net proceeds khi Silver có nguồn đã xác nhận. Hiện tại chỉ AdMob có mặt trong Silver. GA4 `total_revenue` và `purchase_revenue` là reference, không đóng góp vào revenue/profit/ROAS. Không cộng đồng thời AdMob nguồn và bản sao `report/app_daily.revenue`.
 
-Sora đã xuất `report/app_daily.roas` như một report field; nó chỉ được tính khi hai currency code bằng nhau. Semantic layer không ghi derived metrics mới ngược vào Silver và phải phân biệt report có sẵn này với metric được tính động.
+Canonical cost hiện lấy Google Ads; TikTok và nguồn khác chỉ được thêm sau khi Silver có schema đã xác nhận. `finance_daily` chuẩn hóa các khoản tiền sang cả USD và VND bằng FX VND-to-USD. Khi thiếu rate cùng ngày, dùng rate gần nhất trước đó và trả `fx_rate_date` cùng `fx_fallback_used`; không có rate trước đó thì amount quy đổi là null. Không có cutoff tuổi rate. Hiện FX chỉ hỗ trợ VND/USD; currency khác giữ native và không vào USD/VND totals.
+
+`profit` và `roas` chỉ tính khi amount revenue/cost cùng reporting currency và conversion đầy đủ; ROAS chỉ có giá trị khi cost dương. Metrics hỗ trợ grain ngày qua `business_date`; period ROAS được tính từ tổng revenue/tổng cost, không lấy trung bình ROAS ngày. CPI hiện chưa khả dụng: Google Ads CPI cần install-specific conversions; generic conversions không được coi là installs. `app_version`, `ad_source` và `ad_unit` cũng chưa có trong Silver.
+
+Sora đã xuất `report/app_daily.roas` như một native-currency report field; nó chỉ được tính khi hai currency code bằng nhau. SemanticLayer giữ field đó thành `reported_roas_native` reference; normalized ROAS được tính riêng và không ghi ngược vào Silver.
 
 ## 6. Query Contract
 
@@ -129,11 +142,7 @@ Dashboard và MCP dùng chung Query Service. Request biểu diễn metrics, dime
 
 ```json
 {
-  "metrics": [
-    "revenue",
-    "ad_spend",
-    "roas"
-  ],
+  "metrics": ["revenue_usd", "cost_usd", "profit_usd", "roas_usd", "revenue_vnd", "cost_vnd"],
   "dimensions": [
     "date"
   ],
@@ -254,31 +263,66 @@ Dashboard không hard-code toàn bộ layout trong React. Mỗi dashboard đư�
   },
   "widgets": [
     {
-      "id": "revenue",
+      "id": "revenue-usd",
       "type": "metric",
-      "title": "Revenue",
-      "metric": "revenue",
+      "title": "Revenue (USD)",
+      "metric": "revenue_usd",
       "span": 3
     },
     {
-      "id": "spend",
+      "id": "cost-usd",
       "type": "metric",
-      "title": "Ad Spend",
-      "metric": "ad_spend",
+      "title": "Cost (USD)",
+      "metric": "cost_usd",
       "span": 3
     },
     {
-      "id": "roas",
+      "id": "roas-usd",
       "type": "metric",
-      "title": "ROAS",
-      "metric": "roas",
+      "title": "ROAS (USD)",
+      "metric": "roas_usd",
+      "span": 3
+    },
+    {
+      "id": "revenue-vnd",
+      "type": "metric",
+      "title": "Revenue (VND)",
+      "metric": "revenue_vnd",
+      "span": 3
+    },
+    {
+      "id": "cost-vnd",
+      "type": "metric",
+      "title": "Cost (VND)",
+      "metric": "cost_vnd",
+      "span": 3
+    },
+    {
+      "id": "profit-usd",
+      "type": "metric",
+      "title": "Profit (USD)",
+      "metric": "profit_usd",
+      "span": 3
+    },
+    {
+      "id": "profit-vnd",
+      "type": "metric",
+      "title": "Profit (VND)",
+      "metric": "profit_vnd",
+      "span": 3
+    },
+    {
+      "id": "roas-vnd",
+      "type": "metric",
+      "title": "ROAS (VND)",
+      "metric": "roas_vnd",
       "span": 3
     },
     {
       "id": "revenue-trend",
       "type": "area_chart",
       "title": "Revenue vs Spend",
-      "metrics": ["revenue", "ad_spend"],
+      "metrics": ["revenue_usd", "cost_usd"],
       "dimension": "date",
       "span": 8
     },
@@ -286,7 +330,7 @@ Dashboard không hard-code toàn bộ layout trong React. Mỗi dashboard đư�
       "id": "country",
       "type": "bar_chart",
       "title": "Revenue by Country",
-      "metric": "revenue",
+      "metric": "revenue_usd",
       "dimension": "country",
       "span": 4
     }
@@ -360,14 +404,14 @@ Sau này có thể chuyển sang database nếu cần dashboard editor.
 ### App Overview
 
 ```text
-Revenue
-Spend
-Profit
-ROAS
+Revenue USD / Revenue VND
+Cost USD / Cost VND
+Profit USD / Profit VND
+ROAS USD / ROAS VND
 Users
 
-Revenue vs Spend
-Revenue by Country
+Daily Revenue vs Cost (USD or VND)
+Revenue by Country (selected reporting currency)
 ```
 
 ### Monetization
@@ -377,17 +421,17 @@ Ad Revenue
 eCPM
 Impressions
 
-Ad Source
-Ad Unit
 Country
 ```
+
+`ad_source` and `ad_unit` remain unavailable until Silver publishes those fields.
 
 ### Acquisition
 
 ```text
 Spend
-Installs
-CPI
+Installs by source (after verified source fields)
+CPI (Google Ads install conversions only; pending Silver support)
 Campaign
 Country
 ```
@@ -482,15 +526,22 @@ Bar Chart
 Table
 ```
 
-MVP metrics theo contract ban đầu:
+MVP metrics:
 
 ```text
-users
-revenue
-ad_revenue
+active_users
+new_users
+sessions
+admob_revenue_native
+ga4_total_revenue_reference
+google_ads_cost_native
+revenue_usd / revenue_vnd
+cost_usd / cost_vnd
+profit_usd / profit_vnd
+roas_usd / roas_vnd
 ```
 
-Trước khi expose, gắn `users` với GA4 active users và `ad_revenue` với AdMob `estimated_earnings` kèm currency. `revenue` chung cần được chốt định nghĩa; GA4 `total_revenue` và Sora `report/app_daily.revenue` (AdMob revenue) là hai measure khác nhau. Metric thiếu nguồn như `installs`/`cpi` không được giả lập từ cột khác.
+`ga4_total_revenue_reference` chỉ phục vụ đối chiếu, không cộng vào revenue. Google Play net subscription/IAP revenue, TikTok cost và installs/CPI chưa được expose cho đến khi có dataset Silver và semantics được xác nhận.
 
 MVP MCP tools:
 

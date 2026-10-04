@@ -86,27 +86,34 @@ Google Ads campaign geo
   → report/app_daily.cost
 
 FX rates
-  → fx_daily (not used by current report/app_daily calculation)
+  → fx_daily (not used by current Sora report/app_daily calculation)
 ```
 
 In Sora's existing `report/app_daily` model, `revenue` is summed AdMob `estimated_earnings`; `cost` is Google Ads `cost_micros / 1,000,000`. `roas` is `revenue / cost` only when cost is positive and the revenue and cost currency codes are equal; otherwise it is null. This report revenue is not the same field as GA4 `total_revenue`.
 
-GA4 `total_revenue` has no currency column in this Silver schema. Do not combine it with amounts carrying explicit currency codes until its property currency is made available and an aggregation policy is defined. Do not treat `total_revenue` as `purchase_revenue` without a confirmed business definition.
+`fx_daily` currently contains VND-to-USD rates: `rate` means USD per VND. The SemanticLayer consumer view `finance_daily` uses the latest `rate_date` on or before `business_date`; it reports the selected date and whether it fell back to an earlier rate. There is no age cutoff. If no earlier rate exists, the converted amount is null. Only the VND/USD pair is covered; amounts in other currencies remain native and are excluded from USD/VND calculations.
+
+`finance_daily` is a SemanticLayer view over `app_daily` and `fx_daily`, not a new Silver dataset. Its current revenue contribution is AdMob revenue copied into `app_daily`; its current cost contribution is Google Ads cost. It exposes native values and normalized USD/VND values, then derives profit and ROAS by `business_date`, app, and country. Period ROAS is total normalized revenue divided by total normalized cost, not an average of daily ROAS. Missing converted inputs remain null and do not become zero.
+
+The canonical financial revenue contract includes AdMob `estimated_earnings` and, once present in Silver, Google Play subscription/IAP net proceeds. GA4 `total_revenue` and GA4 `purchase_revenue` remain source references and are excluded from canonical revenue. Do not add both raw AdMob and the copied `app_daily.revenue` to one result. No Google Play purchase/subscription dataset is present in this inventory.
 
 ## Semantic-layer availability
 
 | Semantic candidate | Current Silver support | Notes |
 |---|---|---|
 | GA4 active users, new users, sessions | Available | From `ga4_daily_overview`; `active_users`/`new_users` are null for a grouped app/date/country row when more than one GA4 property contributes. |
-| GA4 total revenue | Available, currency implicit | Expose as source-specific until property currency is captured. |
+| GA4 `total_revenue` | Available, currency implicit | Expose as `ga4_total_revenue_reference`, scoped by property; never include in canonical revenue. |
 | Ad revenue, impressions, clicks, requests | Available | From `admob_mediation_daily`; amounts use `currency_code`. |
 | CTR, match rate, observed eCPM | Available | Precomputed in the AdMob Silver model as `impression_ctr`, `match_rate`, `observed_ecpm`. |
-| Campaign spend | Available | `cost_micros` plus `currency_code`; divide by 1,000,000 for source-currency units. |
+| Google Ads cost | Available | `cost_micros` plus `currency_code`; divide by 1,000,000 for source-currency units. |
+| USD/VND revenue and cost, profit, ROAS | Available for current AdMob/Google Ads report inputs | Consumer view `finance_daily`; FX fallback date is visible; ROAS is recalculated from normalized totals at requested grain. |
 | Retention by cohort day | Available | Use `cohort_day` and `retention_rate`; D1/D7/D30 require selecting the matching day. |
 | App, country, campaign | Available | Join via `app_id`, `country_code`, and campaign fields. |
 | `app_version`, `ad_source`, `ad_unit` | Not in current Silver schemas | Do not expose as supported dimensions until a source dataset provides them. |
-| Installs, CPI, purchase revenue | Not established by current schemas | No install/conversion field; GA4 `total_revenue` is not an approved purchase-only measure. |
-| Unified revenue, profit, cross-currency ROAS | Requires policy | Preserve source-specific amounts; current `app_daily.roas` only covers matching currencies. `fx_daily` is not applied by Sora's current report model. |
+| Google Play net subscription/IAP revenue | Not in current Silver schemas | Pending a verified Silver source and net-proceeds field. |
+| TikTok cost | Not in current Silver schemas | Keep source-specific; add only after a verified Silver dataset exists. |
+| Installs by source and CPI | Not in current Silver schemas | Google Ads CPI requires an install-specific conversion field; generic conversions are not installs. |
+| FX conversion outside USD/VND | Not in current FX schema | No normalized value until the corresponding FX pair is published. |
 
 ## Build metadata
 
