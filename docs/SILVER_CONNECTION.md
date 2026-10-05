@@ -21,9 +21,9 @@ values; do not copy Bronze, API, account, or Prefect provisioning secrets.
 | `APP_CONFIG__S3__SILVER__VERIFY_SSL` | Yes | `true` or `false` |
 
 `backend/.env.example` contains placeholders. For local use, copy it to
-`backend/.env.local`; the backend `.envrc` loads it with direnv when entering
-`backend/`. The application itself still reads process environment variables.
-Never commit a populated `.env.local` file.
+`backend/.env`. The API launcher reads root `.env` first and `backend/.env`
+second, so app-specific values override shared defaults. Never commit populated
+environment files.
 
 The read-only key needs `ListBucket` on the Silver bucket for partition
 globbing and `GetObject` for Silver data and manifests. It must not have put,

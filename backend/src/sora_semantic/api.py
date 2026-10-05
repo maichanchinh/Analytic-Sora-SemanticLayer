@@ -9,8 +9,9 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, ConfigDict, Field
 
 from sora_semantic.data.silver import SilverDataSource, SilverReadError
 from sora_semantic.dashboard_configs import (
@@ -27,9 +28,52 @@ from sora_semantic.semantic.query import (
 from sora_semantic.semantic.registry import SemanticRegistry
 
 
+class DateRangeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    from_: str = Field(alias="from", description="Inclusive start date (YYYY-MM-DD).")
+    to: str = Field(description="Inclusive end date (YYYY-MM-DD).")
+
+
+class QueryRequestBody(BaseModel):
+    """OpenAPI schema for the shared semantic query request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = Field(description="Registered semantic model name.")
+    metrics: list[str] = Field(default_factory=list, description="Metrics registered on model.")
+    dimensions: list[str] = Field(
+        default_factory=list, description="Dimensions to return from the model."
+    )
+    filters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Dimension filters; each value is a scalar equality or a list of values.",
+    )
+    date_range: DateRangeBody | None = Field(
+        default=None,
+        description="Optional inclusive range applied to the model time dimension.",
+    )
+
+    def to_query_request(self) -> QueryRequest:
+        return QueryRequest.from_mapping(self.model_dump(mode="python", by_alias=True))
+
+
+def _default_source_factory() -> SilverDataSource:
+    backend_dir = Path(__file__).resolve().parents[2]
+    configured_path = os.environ.get("SORASEMANTIC_DUCKDB_PATH", "").strip()
+    cache_path = (
+        Path(configured_path)
+        if configured_path
+        else backend_dir / ".cache" / "sora-semantic.duckdb"
+    )
+    if not cache_path.is_absolute():
+        cache_path = backend_dir / cache_path
+    return SilverDataSource.from_env(database_path=cache_path)
+
+
 def create_app(
     *,
-    source_factory: Callable[[], SilverDataSource] = SilverDataSource.from_env,
+    source_factory: Callable[[], SilverDataSource] = _default_source_factory,
     dashboard_config_dir: Path | None = None,
 ) -> FastAPI:
     """Create the API app; source creation is deferred until ASGI startup."""
@@ -39,10 +83,23 @@ def create_app(
         source = source_factory()
         try:
             source.connect()
+            refresh_cached_datasets = getattr(source, "refresh_cached_datasets", None)
+            if refresh_cached_datasets is not None:
+                refresh_cached_datasets()
             app.state.silver_source = source
             app.state.semantic_registry = SemanticRegistry(source)
             app.state.query_service = QueryService(app.state.semantic_registry)
             app.state.query_lock = RLock()
+            apps = app.state.query_service.query(
+                QueryRequest(
+                    model="dim_app",
+                    dimensions=("app_id", "display_name", "package_name", "platform", "status"),
+                )
+            )
+            app.state.apps_cache = sorted(
+                apps.rows,
+                key=lambda row: (str(row.get("display_name") or "").casefold(), row["app_id"]),
+            )
             yield
         finally:
             source.close()
@@ -66,16 +123,7 @@ def create_app(
 
     @app.get("/api/v1/apps")
     def list_apps(request: Request) -> dict[str, list[dict[str, Any]]]:
-        query = QueryRequest(
-            model="dim_app",
-            dimensions=("app_id", "display_name", "package_name", "platform", "status"),
-        )
-        result = _execute_app_query(request.app, query)
-        apps = sorted(
-            result.rows,
-            key=lambda row: (str(row.get("display_name") or "").casefold(), row["app_id"]),
-        )
-        return {"apps": list(apps)}
+        return {"apps": list(request.app.state.apps_cache)}
 
     @app.get("/api/v1/metrics")
     def list_metrics(request: Request) -> dict[str, list[dict[str, Any]]]:
@@ -100,9 +148,44 @@ def create_app(
         }
 
     @app.post("/api/v1/query")
-    def run_query(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    def run_query(
+        request: Request,
+        payload: QueryRequestBody = Body(
+            openapi_examples={
+                "finance_summary": {
+                    "summary": "Finance summary",
+                    "description": "Totals normalized to USD over an inclusive date range.",
+                    "value": {
+                        "model": "finance_daily",
+                        "metrics": ["revenue_usd", "cost_usd", "roas_usd"],
+                        "date_range": {"from": "2026-10-01", "to": "2026-10-03"},
+                    },
+                },
+                "campaign_geo": {
+                    "summary": "Campaign spend by country",
+                    "description": "Break down campaign spend by campaign and country.",
+                    "value": {
+                        "model": "campaign_geo",
+                        "metrics": ["campaign_spend"],
+                        "dimensions": ["campaign_name", "country_code", "currency_code"],
+                        "date_range": {"from": "2026-10-01", "to": "2026-10-03"},
+                    },
+                },
+                "retention_cohort": {
+                    "summary": "Retention by cohort day",
+                    "description": "Compare retained users and retention rate by cohort day.",
+                    "value": {
+                        "model": "ga4_retention_cohort",
+                        "metrics": ["cohort_users", "retained_users", "retention_rate"],
+                        "dimensions": ["cohort_date", "cohort_day"],
+                        "date_range": {"from": "2026-10-01", "to": "2026-10-03"},
+                    },
+                },
+            }
+        ),
+    ) -> dict[str, Any]:
         try:
-            query = QueryRequest.from_mapping(payload)
+            query = payload.to_query_request()
         except QueryContractError as error:
             raise HTTPException(status_code=422, detail=str(error)) from None
 

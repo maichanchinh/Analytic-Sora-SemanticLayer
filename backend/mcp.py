@@ -1,11 +1,21 @@
 """Run the local MCP server over stdio or Streamable HTTP."""
 
 import argparse
+from pathlib import Path
 
-from sora_semantic.mcp import mcp
+from dotenv import load_dotenv
+
+
+backend_dir = Path(__file__).resolve().parent
+repo_dir = backend_dir.parent
 
 
 def main() -> None:
+    load_dotenv(repo_dir / ".env")
+    load_dotenv(backend_dir / ".env.local", override=True)
+    load_dotenv(backend_dir / ".env", override=True)
+    from sora_semantic.mcp import mcp
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--transport",

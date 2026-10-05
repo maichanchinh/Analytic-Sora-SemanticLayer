@@ -12,16 +12,15 @@ Xây dựng analytics layer độc lập trên dữ liệu Silver từ Sora. H�
 backend/                 Python project: FastAPI, FastMCP, semantic layer, Silver reader
   src/sora_semantic/      Importable backend package
   api.py, mcp.py           Local API/MCP launchers (`uv run api.py`, `uv run mcp.py`)
-  .envrc                   Shared env + backend-local env
+  .cache/                  Ignored local DuckDB cache
   tests/                  Backend tests
   dashboard/config/       Dashboard JSON definitions served by the API
 dashboard/                Independent TypeScript/Next.js application
-.envrc                    Root shared environment loader
-.env.shared.example       Safe shared variable template
+.env.example              Optional shared local environment defaults
 docs/                     Architecture, data contract, and API documentation
 ```
 
-FastAPI and FastMCP remain interfaces of one backend project and share the semantic query service. The Dashboard is a separate application that consumes the API. Dashboard JSON definitions remain under `backend/dashboard/config/` because the backend currently serves them through `/api/v1/dashboards`. `direnv` loads `.env.shared` at repo root and combines it with each app's `.env.local`; secrets remain app-local.
+FastAPI and FastMCP remain interfaces of one backend project and share the semantic query service. The Dashboard is a separate application that consumes the API. Dashboard JSON definitions remain under `backend/dashboard/config/` because the backend currently serves them through `/api/v1/dashboards`. The launchers load root `.env` followed by the app `.env`; app values override shared defaults, and secrets remain app-local.
 
 ```mermaid
 flowchart TB
@@ -31,7 +30,7 @@ flowchart TB
     MCP --> Query
     Query --> Registry[Semantic Registry\nBoring Semantic Layer]
     Registry --> Ibis[Ibis expressions]
-    Ibis --> DuckDB[DuckDB\nQuery engine]
+    Ibis --> DuckDB[DuckDB\nPersistent local cache + query engine]
     Sora[Sora] -->|publishes Silver data| Silver[Silver Parquet on RustFS\nSource of truth]
     DuckDB -->|scans files| Silver
     Silver -->|returns rows| DuckDB
@@ -433,8 +432,7 @@ Sora-SemanticLayer/
 │   └── tests/
 ├── dashboard/                 # Next.js/TypeScript application
 ├── docs/
-├── .envrc
-├── .env.shared.example
+├── .env.example
 └── README.md
 ```
 

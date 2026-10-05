@@ -2,14 +2,16 @@
 
 ## Chạy local
 
-API dùng cùng cấu hình Silver S3-compatible với `SilverDataSource`. Tạo `backend/.env.local` từ `backend/.env.example`; direnv nạp biến khi vào thư mục `backend/`:
+API dùng cùng cấu hình Silver S3-compatible với `SilverDataSource`. Tạo `backend/.env` từ `backend/.env.example`; launcher tự nạp `.env` ở root rồi `backend/.env` (project ghi đè root):
 
 ```sh
 cd backend && uv sync --all-groups
 uv run api.py
 ```
 
-Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
+Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Mặc định database file nằm ở `backend/.cache/sora-semantic.duckdb`; có thể đổi đường dẫn bằng `SORASEMANTIC_DUCKDB_PATH`. `dim_app` và các dataset đã cache được refresh từ Silver lúc startup; model khác được materialize vào file khi query lần đầu. Nếu refresh startup thất bại, API không khởi động để tránh phục vụ cache cũ. `/api/v1/apps` trả snapshot được nạp và sắp xếp lúc startup.
+
+DuckDB file này là cache cục bộ, không phải source of truth. Chỉ chạy một API process trên cùng cache file. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
 
 ## FastMCP
 
@@ -78,6 +80,8 @@ Trả metadata registry được nhóm theo semantic model. Chỉ model có metr
 Dimensions route dùng cùng shape `models`, với key `dimensions` thay cho `metrics`.
 
 ### `POST /api/v1/query`
+
+Request schema hiển thị trong Swagger UI tại `/docs`. Dropdown Example Value có thể chọn payload mẫu cho finance, campaign geo và retention. Các ví dụ query Silver hiện có, không nạp dữ liệu giả.
 
 Body theo shared `QueryRequest`: `model`, `metrics`, `dimensions`, `filters`, `date_range`.
 

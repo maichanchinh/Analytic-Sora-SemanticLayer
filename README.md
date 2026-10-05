@@ -1,92 +1,67 @@
 # Sora Semantic Layer
 
-Analytics layer chỉ đọc Silver Parquet từ Sora trên RustFS. Backend Python cung cấp semantic metrics và dimensions qua FastAPI và FastMCP; Dashboard là ứng dụng TypeScript độc lập trong cùng repository.
+Analytics layer chỉ đọc Silver Parquet từ Sora trên RustFS. Backend Python cung cấp FastAPI và FastMCP; Dashboard Next.js gọi API để hiển thị dữ liệu.
 
 Tài liệu: [Architecture](docs/ARCHITECTURE.md), [Silver Data Catalog](docs/SILVER_DATA_CATALOG.md), [kết nối Silver](docs/SILVER_CONNECTION.md), [API và MCP](docs/API.md).
 
-## Yêu cầu
+## Cấu hình
 
-- Python 3.14
-- [`uv`](https://docs.astral.sh/uv/)
-- [`direnv`](https://direnv.net/) with zsh hook enabled
-- Credential RustFS chỉ có quyền đọc Silver để chạy API/MCP với dữ liệu thật
+Yêu cầu: Python 3.14, [`uv`](https://docs.astral.sh/uv/), Node.js 20.12+ và pnpm 10+.
 
-## Cài đặt và cấu hình
-
-Backend nằm trong `backend/`; Dashboard TypeScript sẽ nằm trong `dashboard/`. `direnv` hiện được cấu hình bằng `.envrc` ở root và từng app. Tạo các file local từ mẫu:
-
-Trên macOS/zsh, cài `direnv` bằng Homebrew nếu máy chưa có; bảo đảm `eval "$(direnv hook zsh)"` nằm trong `~/.zshrc`, rồi mở shell mới:
+Tạo các file cấu hình local:
 
 ```sh
-brew install direnv
+cp -n .env.example .env
+cp -n backend/.env.example backend/.env
+cp -n dashboard/.env.example dashboard/.env
 ```
 
-```sh
-cp -n .env.shared.example .env.shared
-cp -n backend/.env.example backend/.env.local
-cp -n dashboard/.env.example dashboard/.env.local
-```
+Các app tự đọc `.env` ở root và trong thư mục app. Giá trị trong `backend/.env` hoặc `dashboard/.env` ưu tiên hơn giá trị trùng tên ở root. Điền endpoint và credential RustFS chỉ đọc Silver trong `backend/.env`. Không đặt secret backend vào biến `NEXT_PUBLIC_*`.
 
-`.env.shared` chỉ dành cho biến an toàn, thật sự dùng chung. Biến riêng và credential Silver để trong `backend/.env.local`; config riêng Dashboard để trong `dashboard/.env.local`. Các file local đã bị Git ignore. Không đưa secret backend vào biến `NEXT_PUBLIC_*`.
-
-Cho phép `direnv` đọc các `.envrc` đã review, mỗi thư mục một lần:
-
-```sh
-direnv allow .
-direnv allow backend
-direnv allow dashboard
-cd ..
-```
-
-`.envrc` root nạp shared env; `.envrc` mỗi app nạp shared trước và `.env.local` sau.
-
-Cài backend dependencies từ thư mục backend:
+## Chạy API
 
 ```sh
 cd backend
 uv sync --all-groups
+uv run api.py
 ```
 
-Điền bảy biến `APP_CONFIG__S3__SILVER__*` trong `backend/.env.local` bằng endpoint, bucket, region và credential read-only của RustFS.
-
-## Chạy API
-
-Khởi động API trên `127.0.0.1:8000`:
-
-```sh
-cd backend && uv run api.py
-```
-
-Trong terminal khác, kiểm tra kết nối Silver và endpoint apps:
+API lắng nghe tại `http://127.0.0.1:8000`. Kiểm tra endpoint apps:
 
 ```sh
 curl http://127.0.0.1:8000/api/v1/apps
 ```
 
-API hiện chưa có authentication; chỉ expose trong mạng nội bộ được kiểm soát.
+API chưa có authentication; chỉ expose trong mạng nội bộ được kiểm soát.
 
 ## Chạy MCP
 
-Kết nối qua `stdio` khi MCP client khởi chạy server process:
+Chạy stdio cho MCP client:
 
 ```sh
 cd backend && uv run mcp.py
 ```
 
-Hoặc khởi chạy MCP qua `Streamable HTTP` tại `http://127.0.0.1:8001/mcp`:
+Hoặc chạy Streamable HTTP tại `http://127.0.0.1:8001/mcp`:
 
 ```sh
 cd backend && uv run mcp.py --transport streamable-http
 ```
 
-MCP tools gồm `list_apps`, `list_metrics`, `query_metrics`. Authorization và app scope chưa được triển khai; giữ HTTP server trong network boundary phù hợp.
+## Chạy Dashboard
 
-## Chạy tests
+```sh
+cd dashboard
+pnpm install
+pnpm dev
+```
 
-Tests dùng Silver giả lập và không cần `.env` hoặc kết nối RustFS:
+Dashboard mặc định chạy tại `http://localhost:3000`; API mặc định cho phép origin này trong CORS.
+
+## Tests
+
+Tests backend dùng Silver giả lập, không cần credential hoặc kết nối RustFS:
 
 ```sh
 cd backend && uv run python -m unittest discover -s tests -v
 ```
-
-Các lệnh API/MCP/Test chạy từ `backend/`; sau khi direnv load env, không cần `--env-file`.

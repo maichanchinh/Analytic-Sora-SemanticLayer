@@ -1322,6 +1322,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "ibis-framework", extra = ["duckdb"] },
+    { name = "python-dotenv" },
     { name = "uvicorn" },
 ]
 
@@ -1337,6 +1338,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.142.2" },
     { name = "fastmcp", specifier = ">=4.0.10" },
     { name = "ibis-framework", extras = ["duckdb"], specifier = ">=11.0.0" },
+    { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 

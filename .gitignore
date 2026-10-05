@@ -15,12 +15,12 @@ dist/
 build/
 *.egg-info/
 *.tsbuildinfo
+backend/.cache/
 
 # Local configuration and secrets
 .env
 .env.*
 !.env.example
-!.env.shared.example
 
 # Next.js / Node.js
 node_modules/
