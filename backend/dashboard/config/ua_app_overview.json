@@ -1,21 +1,26 @@
 {
   "id": "ua_app_overview",
   "title": "UA App Overview",
-  "filters": ["date_range", "app_id", "country_code"],
+  "filters": ["app_id", "country_code", "date_range"],
+  "layout": { "columns": 12 },
   "widgets": [
     {
       "id": "financial_kpis_usd",
       "type": "metric",
       "title": "Financial KPIs (USD)",
       "model": "finance_daily",
-      "metrics": ["revenue_usd", "cost_usd", "profit_usd", "roas_usd"]
+      "metrics": ["revenue_usd", "cost_usd", "profit_usd", "roas_usd"],
+      "dimensions": [],
+      "span": 12
     },
     {
       "id": "financial_kpis_vnd",
       "type": "metric",
       "title": "Financial KPIs (VND)",
       "model": "finance_daily",
-      "metrics": ["revenue_vnd", "cost_vnd", "profit_vnd", "roas_vnd"]
+      "metrics": ["revenue_vnd", "cost_vnd", "profit_vnd", "roas_vnd"],
+      "dimensions": [],
+      "span": 12
     },
     {
       "id": "financial_trend_usd",
@@ -23,7 +28,17 @@
       "title": "Revenue and Spend (USD)",
       "model": "finance_daily",
       "metrics": ["revenue_usd", "cost_usd"],
-      "dimensions": ["business_date"]
+      "dimensions": ["business_date"],
+      "span": 8
+    },
+    {
+      "id": "revenue_by_country",
+      "type": "bar_chart",
+      "title": "Revenue by Country (USD)",
+      "model": "finance_daily",
+      "metrics": ["revenue_usd"],
+      "dimensions": ["country_code"],
+      "span": 4
     },
     {
       "id": "campaign_spend",
@@ -31,14 +46,27 @@
       "title": "Campaign Spend",
       "model": "google_ads_campaign_geo_daily",
       "metrics": ["campaign_spend"],
-      "dimensions": ["campaign_name", "country_code", "currency_code"]
+      "dimensions": ["campaign_name", "country_code", "currency_code"],
+      "filters": ["campaign_id"],
+      "span": 12
     },
     {
-      "id": "ga4_engagement",
-      "type": "metric",
-      "title": "GA4 Engagement",
+      "id": "ga4_engagement_trend",
+      "type": "area_chart",
+      "title": "GA4 Engagement Trend",
       "model": "ga4_daily_overview",
-      "metrics": ["active_users", "new_users", "sessions", "engaged_sessions", "screen_page_views"]
+      "metrics": ["sessions", "engaged_sessions", "screen_page_views"],
+      "dimensions": ["business_date"],
+      "span": 12
+    },
+    {
+      "id": "ga4_daily_detail",
+      "type": "table",
+      "title": "GA4 Users and Engagement by Country",
+      "model": "ga4_daily_overview",
+      "metrics": ["active_users", "new_users", "sessions", "engaged_sessions", "screen_page_views"],
+      "dimensions": ["business_date", "country_code"],
+      "span": 12
     },
     {
       "id": "admob_performance",
@@ -55,7 +83,8 @@
         "match_rate",
         "observed_ecpm"
       ],
-      "dimensions": ["business_date", "country_code", "currency_code"]
+      "dimensions": ["business_date", "country_code", "currency_code"],
+      "span": 12
     },
     {
       "id": "retention_by_cohort_day",
@@ -63,7 +92,9 @@
       "title": "Retention by Cohort Day",
       "model": "ga4_retention_cohort",
       "metrics": ["retention_rate"],
-      "dimensions": ["cohort_day"]
+      "dimensions": ["cohort_day"],
+      "filters": ["cohort_day"],
+      "span": 4
     }
   ]
 }

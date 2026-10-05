@@ -15,7 +15,7 @@ Tài liệu nền:
 
 Backend Python nằm trong `backend/`; package ở `backend/src/sora_semantic/`. Backend đã có kết nối Silver read-only qua DuckDB/Ibis, semantic registry cho các dataset production trong Catalog, `finance_daily`, và shared Query Service có validation cho model/metric/dimension/filter/date range. Semantic definitions hiện có ở `backend/src/sora_semantic/semantic/models/datasets.py` và `finance.py`; danh sách theo model lấy từ registry, còn Architecture mô tả target semantic contract rộng hơn.
 
-Đã có FastAPI routes cho apps, metric/dimension metadata, shared query service và dashboard JSON config; cấu hình ban đầu ở `backend/dashboard/config/ua_app_overview.json`. FastMCP cung cấp `list_apps`, `list_metrics` và `query_metrics` qua `stdio` và `Streamable HTTP`, dùng chung `SemanticRegistry`/`QueryService`; hướng dẫn chạy và contract ở [FastAPI and MCP](API.md). Tests ở `backend/tests/` bao phủ API, query và hai MCP transports. Live RustFS API smoke test trước đó đã đọc 20 apps và 4 finance rows cho 2026-09-30 đến 2026-10-03; đó là snapshot lúc chạy, không phải freshness/retention guarantee. Dashboard UI chưa có. Authentication/Authorization được loại khỏi phạm vi hiện tại. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
+Đã có FastAPI routes cho apps, metric/dimension metadata, shared query service và dashboard JSON config; cấu hình App Overview ở `backend/dashboard/config/ua_app_overview.json`. SOF-71 bổ sung Dashboard Next.js render từ JSON với bốn widget MVP và filter/query qua FastAPI. FastMCP cung cấp `list_apps`, `list_metrics` và `query_metrics` qua `stdio` và `Streamable HTTP`, dùng chung `SemanticRegistry`/`QueryService`; hướng dẫn chạy ở [FastAPI and MCP](API.md). Tests API/query nằm ở `backend/tests/`; frontend checks nằm trong `dashboard/`. Live RustFS API smoke test trước đó đã đọc 20 apps và 4 finance rows cho 2026-09-30 đến 2026-10-03; đó là snapshot lúc chạy, không phải freshness/retention guarantee. Authentication/Authorization được loại khỏi phạm vi hiện tại. Git đã có lịch sử commit; kiểm tra trạng thái từng lần trước khi thay đổi.
 
 ## Hợp đồng dữ liệu cần giữ
 
@@ -43,7 +43,7 @@ ga4_daily_overview
   → React dynamic renderer
 ```
 
-Đã triển khai shared Query Service, model-backed semantic registry, FastAPI apps/metadata/query/dashboard-config routes và SOF-70 MCP tools. SOF-69 API dùng contract UA Marketing Dashboard trong [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md); Dashboard UI chưa được triển khai. Authentication/Authorization bị loại khỏi phạm vi hiện tại.
+Đã triển khai shared Query Service, model-backed semantic registry, FastAPI apps/metadata/query/dashboard-config routes, SOF-70 MCP tools và Dashboard UI của SOF-71. SOF-71 dùng metric/filter contract trong [UA Marketing Dashboard Contract](UA_MARKETING_DASHBOARD.md). Authentication/Authorization bị loại khỏi phạm vi hiện tại.
 
 Bắt đầu với metrics GA4 có nguồn rõ ràng, như `active_users` (đặt tên API theo semantic contract được chốt), `new_users` và `sessions`; giữ riêng `ga4_total_revenue` với currency implicit cho đến khi có policy. Chỉ thêm metrics khi source mapping, grain, null behavior và currency semantics đã được xác nhận.
 

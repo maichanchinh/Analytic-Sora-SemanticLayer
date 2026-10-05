@@ -1,5 +1,14 @@
-# Dashboard
+# Sora Semantic Dashboard
 
-Thư mục dành cho ứng dụng Dashboard TypeScript/Next.js của Sora Semantic Layer. UI chưa được khởi tạo trong repo hiện tại.
+Next.js dashboard that renders read-only dashboard JSON served by FastAPI. All analytics queries go through `/api/v1/query`; the browser never reads Silver directly.
 
-JSON dashboard mà backend đang phục vụ qua API thuộc `backend/dashboard/config/`; thư mục đó không phải source của giao diện TypeScript. Env local của app đặt trong `.env.local`; `.envrc` của thư mục nạp env chung ở repository root trước, rồi env riêng của Dashboard.
+## Local development
+
+1. Install Node.js 20+ and pnpm 10+.
+2. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_BASE_URL` to the FastAPI origin.
+3. Allow the Dashboard origin in the API's `DASHBOARD_CORS_ORIGINS` (default local origin is `http://localhost:3000`).
+4. Run `pnpm install` and `pnpm dev` from this directory.
+
+Build and validation: `pnpm typecheck`, `pnpm test`, then `pnpm build`.
+
+Dashboard definitions are served by `GET /api/v1/dashboards` and `GET /api/v1/dashboards/{id}` from `backend/dashboard/config/`.

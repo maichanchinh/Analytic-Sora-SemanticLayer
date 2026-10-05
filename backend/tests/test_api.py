@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 import ibis
 from httpx import ASGITransport, AsyncClient
@@ -223,8 +224,13 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(detail.status_code, 200)
         dashboard = detail.json()
+        self.assertEqual(
+            dashboard["filters"], ["app_id", "country_code", "date_range"]
+        )
         definitions = {item["name"]: item for item in SemanticRegistry().describe()}
         for widget in dashboard["widgets"]:
+            self.assertIn(widget["type"], {"metric", "area_chart", "bar_chart", "table"})
+            self.assertGreaterEqual(widget["span"], 1)
             self.assertIn(widget["model"], definitions)
             model = definitions[widget["model"]]
             self.assertLessEqual(
@@ -235,6 +241,27 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
                 set(widget.get("dimensions", [])),
                 {item["name"] for item in model["dimensions"]},
             )
+            self.assertLessEqual(
+                set(widget.get("filters", [])),
+                {item["name"] for item in model["dimensions"]},
+            )
+
+    async def test_dashboard_cors_allows_configured_frontend_origin(self) -> None:
+        source = InMemorySilverSource()
+        with patch.dict("os.environ", {"DASHBOARD_CORS_ORIGINS": "http://localhost:3000"}):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.options(
+                    "/api/v1/dashboards",
+                    headers={
+                        "Origin": "http://localhost:3000",
+                        "Access-Control-Request-Method": "GET",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers.get("access-control-allow-origin"), "http://localhost:3000"
+        )
 
     async def test_unknown_and_invalid_dashboard_ids_return_404(self) -> None:
         source = InMemorySilverSource()

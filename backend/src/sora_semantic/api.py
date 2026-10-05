@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 from threading import RLock
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from sora_semantic.data.silver import SilverDataSource, SilverReadError
 from sora_semantic.dashboard_configs import (
@@ -49,6 +51,16 @@ def create_app(
         title="Sora Semantic Layer API",
         version="1.0.0",
         lifespan=lifespan,
+    )
+    cors_origins = os.getenv(
+        "DASHBOARD_CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[origin.strip() for origin in cors_origins.split(",") if origin.strip()],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
     )
     app.state.dashboard_config_store = DashboardConfigStore(dashboard_config_dir)
 

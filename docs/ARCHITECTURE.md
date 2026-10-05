@@ -316,16 +316,13 @@ Dashboard không hard-code toàn bộ layout trong React. Mỗi dashboard đư�
 
 ## 11. React Dynamic Renderer
 
-Frontend có component registry cho các loại widget:
+MVP frontend có component registry cho các loại widget:
 
 ```text
 metric
 area_chart
-line_chart
 bar_chart
-pie_chart
 table
-heatmap
 ```
 
 Ví dụ registry:
@@ -334,11 +331,8 @@ Ví dụ registry:
 const widgetRegistry = {
   metric: MetricWidget,
   area_chart: AreaChartWidget,
-  line_chart: LineChartWidget,
   bar_chart: BarChartWidget,
-  pie_chart: PieChartWidget,
   table: TableWidget,
-  heatmap: HeatmapWidget,
 }
 ```
 
@@ -350,13 +344,11 @@ flowchart LR
     DashboardRenderer --> WidgetRenderer
     WidgetRenderer --> Registry{Widget type}
     Registry --> Metric[MetricWidget]
-    Registry --> Charts[Area / Line / Bar / Pie widgets]
+    Registry --> Charts[Area / Bar widgets]
     Registry --> Table[TableWidget]
-    Registry --> Heatmap[HeatmapWidget]
     Metric --> UI[Tremor Raw / Recharts / ECharts]
     Charts --> UI
     Table --> UI
-    Heatmap --> UI
 ```
 
 Dashboard mới chỉ cần JSON config; không cần viết React page mới.
@@ -367,11 +359,10 @@ MVP lưu cấu hình backend phục vụ trong `backend/dashboard/config/*.json`
 
 ```text
 backend/dashboard/config/
-├── app-overview.json
-├── monetization.json
-├── acquisition.json
-└── retention.json
+└── ua_app_overview.json
 ```
+
+Dashboard UI nằm trong `dashboard/`; config được API phục vụ từ `backend/dashboard/config/`.
 
 Sau này có thể chuyển sang database nếu cần dashboard editor.
 

@@ -31,6 +31,11 @@ Authorization và app scope chưa được triển khai trong dự án hiện t�
 
 ## Endpoints
 
+FastAPI permits Dashboard browser requests from the local development origins
+`http://localhost:3000` and `http://127.0.0.1:3000` by default. Configure
+`DASHBOARD_CORS_ORIGINS` as a comma-separated allowlist when the Dashboard uses
+other origins; wildcard origins are not enabled.
+
 ### `GET /api/v1/apps`
 
 Đọc danh sách từ semantic model `dim_app`, sắp xếp theo `display_name` rồi `app_id`.
@@ -113,7 +118,7 @@ ID không hợp lệ hoặc không có config trả `404`. Config không đọc 
 
 ## Phạm vi hiện tại
 
-API expose apps, semantic metadata, query và dashboard JSON config. MCP expose apps, metric metadata và query qua `stdio` hoặc `Streamable HTTP`. Dashboard UI, authentication và CORS chưa được triển khai trong phase này.
+API expose apps, semantic metadata, query và dashboard JSON config. MCP expose apps, metric metadata và query qua `stdio` hoặc `Streamable HTTP`. Dashboard Next.js tiêu thụ các endpoint này; CORS dùng allowlist cấu hình ở trên. Authentication/Authorization chưa được triển khai trong phase này.
 
 ## Kiểm tra
 
@@ -121,4 +126,12 @@ Chạy toàn bộ automated tests (gồm MCP `stdio` và `Streamable HTTP` smoke
 
 ```sh
 cd backend && uv run python -m unittest discover -s tests -v
+```
+
+Dashboard checks chạy trong `dashboard/`:
+
+```sh
+pnpm test
+pnpm run typecheck
+pnpm run build
 ```
