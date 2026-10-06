@@ -23,6 +23,7 @@ export function DashboardClient() {
   const [widgetStates, setWidgetStates] = useState<Record<string, WidgetState>>({});
   const [pageError, setPageError] = useState("");
   const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -89,9 +90,10 @@ export function DashboardClient() {
     }
   };
 
-  return <main className="app-shell">
-    <aside className="sidebar">
-      <a className="brand" href="/" aria-label="Sora dashboard home"><span className="brand-mark">S</span><span>Sora<span className="brand-muted"> / Analytics</span></span></a>
+  return <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+      <button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? "Expand menu" : "Collapse menu"} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? "›" : "‹"}</button>
+      <a className="brand" href="/" aria-label="Sora dashboard home"><span className="brand-mark">S</span><span className="brand-copy">Sora<span className="brand-muted"> / Analytics</span></span></a>
       <div className="nav-label">WORKSPACE</div>
       <nav aria-label="Dashboards">
         {dashboards.map((item) => <button key={item.id} className={`nav-item ${config?.id === item.id ? "active" : ""}`} onClick={() => void changeDashboard(item.id)}>{item.title}</button>)}
@@ -106,7 +108,7 @@ export function DashboardClient() {
         {config && !loadingDashboard && <>
           <div className="page-title-row"><div><div className="eyebrow">PERFORMANCE OVERVIEW</div><h1>{config.title}</h1><p>Monitor revenue, cost and ROAS across your apps.</p></div><div className="updated-badge"><span className="status-dot" /> API data</div></div>
           <Filters config={config} filters={filters} apps={apps} countries={countries} campaigns={campaigns} onChange={setFilters} />
-          <DashboardRenderer config={config} widgetStates={widgetStates} apps={apps} />
+          <DashboardRenderer config={config} widgetStates={widgetStates} apps={apps} dateRange={filters.date_range} />
         </>}
         <footer className="page-footer">Data served by Sora Semantic Layer · Read-only Silver analytics</footer>
       </div>

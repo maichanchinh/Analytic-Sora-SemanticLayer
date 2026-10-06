@@ -11,13 +11,13 @@ Dashboard này hỗ trợ quyết định UA cho từng app: theo dõi chi phí 
 | Nhóm | Semantic model | Metric | Cách dùng và giới hạn |
 |---|---|---|---|
 | KPI tài chính | `finance_daily` | `revenue_usd`, `revenue_vnd`, `cost_usd`, `cost_vnd`, `profit_usd`, `profit_vnd`, `roas_usd`, `roas_vnd` | Hiển thị USD và VND thành các chuỗi KPI riêng. ROAS theo kỳ là tổng revenue chia tổng cost cùng đơn vị; không lấy trung bình ROAS ngày. |
-| Giá trị nguồn | `finance_daily` | `admob_revenue_native`, `google_ads_cost_native` | Chỉ hiển thị ở bảng chi tiết cùng `revenue_currency_code` hoặc `cost_currency_code`; không cộng các currency khác nhau. |
+| Giá trị nguồn | `finance_daily` | `admob_revenue_native`, `google_ads_cost_native` | Đọc trực tiếp từ `admob_mediation_daily.estimated_earnings` và `google_ads_campaign_geo_daily.cost_micros`; hiển thị cùng `revenue_currency_code` hoặc `cost_currency_code`, không cộng currency khác nhau. |
 | UA/engagement | `ga4_daily_overview` | `active_users`, `new_users`, `sessions`, `engaged_sessions`, `screen_page_views` | Trend theo ngày và breakdown app/country. `active_users` và `new_users` có thể null khi nhiều GA4 property đóng góp vào một dòng app/date/country. |
 | Monetization | `admob_mediation_daily` | `estimated_earnings`, `impressions`, `clicks`, `ad_requests`, `matched_requests`, `impression_ctr`, `match_rate`, `observed_ecpm` | Hiển thị native earnings theo `currency_code`; ratio/eCPM có thể null khi mẫu số bằng 0 hoặc currency không đồng nhất. |
 | Campaign acquisition | `google_ads_campaign_geo_daily` | `campaign_spend` | Bảng xếp hạng/breakdown theo `campaign_name`, `country_code`, ngày; `cost_micros` chỉ dành cho chi tiết kỹ thuật và phải chia 1,000,000 mới thành đơn vị tiền nguồn. |
 | Retention | `ga4_retention_cohort` | `cohort_users`, `retained_users`, `retention_rate` | Hiển thị cohort theo `cohort_date`; D1/D7/D30 là `cohort_day` lần lượt bằng 1/7/30, không suy ra từ ngày hoạt động. |
 
-Chỉ dùng một bản của mỗi nguồn: `finance_daily` đã tổng hợp AdMob và Google Ads từ `app_daily`; không cộng thêm `app_daily.revenue` hoặc bảng `campaign_geo` vào cùng KPI. `ga4_total_revenue_reference` không phải canonical revenue vì currency không có trong Silver. Không dùng `reported_roas_native` làm KPI chính vì đó là giá trị report tham chiếu ở native currency.
+Chỉ dùng một bản của mỗi nguồn: `finance_daily` đọc các dataset nguồn AdMob và Google Ads trực tiếp; không cộng thêm bản sao `app_daily` hoặc `campaign_geo` vào cùng KPI. `ga4_total_revenue_reference` không phải canonical revenue vì currency không có trong Silver. Không dùng `reported_roas_native` làm KPI chính vì đó là giá trị report tham chiếu ở native currency.
 
 ## Bộ lọc
 

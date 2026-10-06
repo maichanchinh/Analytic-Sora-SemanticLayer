@@ -18,7 +18,10 @@ export function WidgetRenderer({ widget, state, apps = [] }: Props) {
   const { result } = state;
   return <section className="widget" aria-labelledby={`${widget.id}-title`} data-testid={`widget-${widget.id}`}>
     <WidgetHeader widget={widget} />
-    {result.rows.length === 0 ? <p className="state-empty">No data for the selected filters.</p> : (
+    {result.rows.length === 0 && widget.type === "table" && widget.unavailable_metrics?.length ? <>
+      {widgetRegistry[widget.type]?.(widget, result, apps)}
+      <p className="state-empty">No data for the selected filters.</p>
+    </> : result.rows.length === 0 ? <p className="state-empty">No data for the selected filters.</p> : (
       widgetRegistry[widget.type]?.(widget, result, apps) ?? <p className="state-error">Unsupported widget type: {widget.type}</p>
     )}
   </section>;
@@ -95,13 +98,14 @@ function barChartWidget(_widget: DashboardWidget, result: QueryResult) {
 
 function tableWidget(_widget: DashboardWidget, result: QueryResult, apps: AppOption[]) {
   const fields = [...result.dimensions, ...result.metrics];
+  const unavailable = _widget.unavailable_metrics ?? [];
   const comparisons = new Map((result.comparisons ?? []).map((item) => [JSON.stringify(item.dimensions), item.metrics]));
   const rows = [...result.rows].sort((left, right) => Number(right.estimated_earnings ?? 0) - Number(left.estimated_earnings ?? 0));
   return <div className="table-scroll"><table>
-    <thead><tr>{fields.map((field) => <th key={field.name}>{field.name === "app_id" ? "App" : field.name.replaceAll("_", " ")}</th>)}</tr></thead>
+    <thead><tr>{fields.map((field) => <th key={field.name}>{field.name === "app_id" ? "App" : field.name.replaceAll("_", " ")}</th>)}{unavailable.map((name) => <th key={name}>{name.replaceAll("_", " ")}</th>)}</tr></thead>
     <tbody>{rows.map((row, index) => {
       const comparison = comparisons.get(JSON.stringify(Object.fromEntries(result.dimensions.map((field) => [field.name, row[field.name]]))));
-      return <tr key={index}>{fields.map((field) => <td key={field.name}>{result.metrics.some((item) => item.name === field.name) ? <>{formatMetricValue(row[field.name], field, row)}{comparison?.[field.name] && <ChangeIndicator comparison={comparison[field.name]} metric={field.name} field={field} row={row} />}</> : field.name === "app_id" ? (apps.find((app) => app.app_id === row.app_id)?.display_name ?? String(row.app_id ?? "Unavailable")) : String(row[field.name] ?? "Unavailable")}</td>)}</tr>;
+      return <tr key={index}>{fields.map((field) => <td key={field.name}>{result.metrics.some((item) => item.name === field.name) ? <>{formatMetricValue(row[field.name], field, row)}{comparison?.[field.name] && <ChangeIndicator comparison={comparison[field.name]} metric={field.name} field={field} row={row} />}</> : field.name === "app_id" ? (apps.find((app) => app.app_id === row.app_id)?.display_name ?? String(row.app_id ?? "Unavailable")) : String(row[field.name] ?? "Unavailable")}</td>)}{unavailable.map((name) => <td className="unavailable-cell" key={name}>Unavailable</td>)}</tr>;
     })}</tbody>
   </table></div>;
 }

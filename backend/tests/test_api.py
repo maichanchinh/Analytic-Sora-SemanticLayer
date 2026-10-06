@@ -83,6 +83,11 @@ class BrokenSilverSource(InMemorySilverSource):
         raise RuntimeError("private connection detail")
 
 
+class ExpiredCacheFailureSilverSource(InMemorySilverSource):
+    def refresh_expired_cached_datasets(self) -> None:
+        raise SilverReadError("expired cache could not be refreshed")
+
+
 @asynccontextmanager
 async def api_client(app, *, raise_app_exceptions: bool = True):
     async with app.router.lifespan_context(app):
@@ -149,6 +154,18 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["metrics"], [])
         self.assertEqual(body["rows"], [{"app_id": "app.a", "display_name": "Alpha"}])
         self.assertEqual([item["name"] for item in body["dimensions"]], ["app_id", "display_name"])
+
+    async def test_expired_cache_refresh_failure_returns_503(self) -> None:
+        source = ExpiredCacheFailureSilverSource()
+        async with api_client(create_app(source_factory=lambda: source)) as client:
+            response = await client.post(
+                "/api/v1/query",
+                json={"model": "dim_app", "dimensions": ["app_id"], "filters": {}},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "Silver data source is unavailable.")
+        self.assertTrue(source.closed)
 
     async def test_query_applies_inclusive_date_range(self) -> None:
         source = InMemorySilverSource()

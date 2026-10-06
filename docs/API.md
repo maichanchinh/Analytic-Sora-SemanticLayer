@@ -9,7 +9,7 @@ cd backend && uv sync --all-groups
 uv run api.py
 ```
 
-Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Mặc định database file nằm ở `backend/.cache/sora-semantic.duckdb`; có thể đổi đường dẫn bằng `SORASEMANTIC_DUCKDB_PATH`. `dim_app` và các dataset đã cache được refresh từ Silver lúc startup; model khác được materialize vào file khi query lần đầu. Nếu refresh startup thất bại, API không khởi động để tránh phục vụ cache cũ. `/api/v1/apps` trả snapshot được nạp và sắp xếp lúc startup.
+Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Mặc định database file nằm ở `backend/.cache/sora-semantic.duckdb`; có thể đổi đường dẫn bằng `SORASEMANTIC_DUCKDB_PATH`. `dim_app` và các dataset đã cache được refresh từ Silver lúc startup. Các bảng materialize được kiểm tra trước mỗi query và refresh khi cache đạt TTL 5 phút; nếu refresh lỗi, API trả `503` thay vì phục vụ snapshot hết hạn. `/api/v1/apps` cũng đọc lại danh mục sau khi refresh cache.
 
 DuckDB file này là cache cục bộ, không phải source of truth. Chỉ chạy một API process trên cùng cache file. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
 

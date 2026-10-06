@@ -18,7 +18,7 @@ export function Filters({ config, filters, apps, countries, campaigns, onChange 
 
   return (
     <section className="filter-panel" aria-label="Dashboard filters">
-      {has("app_id") && <label>Application
+      {has("app_id") && <label className="application-filter">Application
         <select value={filters.app_id} onChange={(event) => onChange({ ...filters, app_id: event.target.value })}>
           <option value="">All applications</option>
           {apps.map((app) => <option key={app.app_id} value={app.app_id}>{app.display_name}</option>)}
@@ -40,12 +40,25 @@ export function Filters({ config, filters, apps, countries, campaigns, onChange 
         </div>
       </details>}
       {has("date_range") && <div className="date-filter">
-        {config.id === "ua_app_overview" ? <label>Period
-          <select value={filters.date_range.to} onChange={(event) => onChange({ ...filters, date_range: { from: event.target.value, to: event.target.value } })}>
-            <option value={initialDateRange().to}>Today</option>
-            <option value={shiftDate(initialDateRange().to, -1)}>Yesterday</option>
-          </select>
-        </label> : <>
+        {config.id === "ua_app_overview" ? <>
+          <label>Period
+            <select value={periodValue(filters.date_range)} onChange={(event) => {
+              const today = shiftDate(initialDateRange().to, 1);
+              if (event.target.value === "custom") return;
+              const end = event.target.value === "today" ? today : shiftDate(today, -1);
+              const days = event.target.value === "today" ? 1 : Number(event.target.value);
+              onChange({ ...filters, date_range: { from: shiftDate(end, -(days - 1)), to: end } });
+            }}>
+              <option value="today">Today</option>
+              <option value="1">Yesterday</option>
+              <option value="3">3 days</option>
+              <option value="7">7 days</option>
+              <option value="custom">Custom dates</option>
+            </select>
+          </label>
+          <label>From<input type="date" value={filters.date_range.from} max={filters.date_range.to} onChange={(event) => onChange({ ...filters, date_range: { ...filters.date_range, from: event.target.value } })} /></label>
+          <label>To<input type="date" value={filters.date_range.to} min={filters.date_range.from} max={shiftDate(initialDateRange().to, 1)} onChange={(event) => onChange({ ...filters, date_range: { ...filters.date_range, to: event.target.value } })} /></label>
+        </> : <>
         <label>From<input type="date" value={filters.date_range.from} onChange={(event) => onChange({ ...filters, date_range: { ...filters.date_range, from: event.target.value } })} /></label>
         <label>To<input type="date" value={filters.date_range.to} onChange={(event) => onChange({ ...filters, date_range: { ...filters.date_range, to: event.target.value } })} /></label>
         </>}
@@ -64,4 +77,12 @@ export function Filters({ config, filters, apps, countries, campaigns, onChange 
       </label>}
     </section>
   );
+}
+
+function periodValue(range: { from: string; to: string }): string {
+  const today = shiftDate(initialDateRange().to, 1);
+  if (range.from === today && range.to === today) return "today";
+  const days = (new Date(`${range.to}T12:00:00Z`).getTime() - new Date(`${range.from}T12:00:00Z`).getTime()) / 86_400_000 + 1;
+  if (range.to === initialDateRange().to && [1, 3, 7].includes(days)) return String(days);
+  return "custom";
 }

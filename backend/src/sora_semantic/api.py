@@ -97,16 +97,7 @@ def create_app(
             app.state.semantic_registry = SemanticRegistry(source)
             app.state.query_service = QueryService(app.state.semantic_registry)
             app.state.query_lock = RLock()
-            apps = app.state.query_service.query(
-                QueryRequest(
-                    model="dim_app",
-                    dimensions=("app_id", "display_name", "package_name", "platform", "status"),
-                )
-            )
-            app.state.apps_cache = sorted(
-                apps.rows,
-                key=lambda row: (str(row.get("display_name") or "").casefold(), row["app_id"]),
-            )
+            app.state.apps_cache = []
             yield
         finally:
             source.close()
@@ -130,7 +121,25 @@ def create_app(
 
     @app.get("/api/v1/apps")
     def list_apps(request: Request) -> dict[str, list[dict[str, Any]]]:
-        return {"apps": list(request.app.state.apps_cache)}
+        try:
+            with request.app.state.query_lock:
+                _refresh_expired_silver_cache(request.app)
+                apps = request.app.state.query_service.query(
+                    QueryRequest(
+                        model="dim_app",
+                        dimensions=("app_id", "display_name", "package_name", "platform", "status"),
+                    )
+                )
+                request.app.state.apps_cache = sorted(
+                    apps.rows,
+                    key=lambda row: (str(row.get("display_name") or "").casefold(), row["app_id"]),
+                )
+                return {"apps": list(request.app.state.apps_cache)}
+        except SilverReadError:
+            raise HTTPException(
+                status_code=503,
+                detail="Silver data source is unavailable.",
+            ) from None
 
     @app.get("/api/v1/metrics")
     def list_metrics(request: Request) -> dict[str, list[dict[str, Any]]]:
@@ -267,7 +276,20 @@ def create_app(
 def _execute_app_query(app: FastAPI, query: QueryRequest) -> QueryResult:
     # QueryService lazily caches semantic tables; serialize access to its registry.
     with app.state.query_lock:
+        try:
+            _refresh_expired_silver_cache(app)
+        except SilverReadError:
+            raise HTTPException(
+                status_code=503,
+                detail="Silver data source is unavailable.",
+            ) from None
         return _execute_query(app.state.query_service, query)
+
+
+def _refresh_expired_silver_cache(app: FastAPI) -> None:
+    refresh = getattr(app.state.silver_source, "refresh_expired_cached_datasets", None)
+    if refresh is not None:
+        refresh()
 
 
 def _execute_query(service: QueryService, query: QueryRequest) -> QueryResult:

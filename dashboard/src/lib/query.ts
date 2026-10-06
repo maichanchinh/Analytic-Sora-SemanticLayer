@@ -42,7 +42,8 @@ export function queryForWidget(
 
 export function initialDateRange(now = new Date()): { from: string; to: string } {
   const today = businessDate(now);
-  return { from: today, to: today };
+  const yesterday = shiftDate(today, -1);
+  return { from: yesterday, to: yesterday };
 }
 
 export function shiftDate(value: string, days: number): string {

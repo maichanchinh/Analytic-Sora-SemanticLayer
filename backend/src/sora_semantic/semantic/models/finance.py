@@ -14,10 +14,14 @@ from sora_semantic.semantic.models.base import (
 
 @dataclass(frozen=True)
 class FinanceDailyDefinition:
-    """Currency-normalized finance view over app_daily and fx_daily."""
+    """Currency-normalized AdMob and Google Ads view over Silver source tables."""
 
     name: str = "finance_daily"
-    source_tables: tuple[str, ...] = ("app_daily", "fx_daily")
+    source_tables: tuple[str, ...] = (
+        "admob_mediation_daily",
+        "google_ads_campaign_geo_daily",
+        "fx_daily",
+    )
     grain: tuple[str, ...] = ("business_date", "app_id", "country_code")
 
     @property
@@ -38,19 +42,18 @@ class FinanceDailyDefinition:
                 _metric(
                     "admob_revenue_native",
                     "currency",
-                    source_column="revenue",
-                    aggregation="scaled_sum",
+                    source_column="admob_revenue_native",
+                    aggregation="sum_by_currency",
                     currency_column="revenue_currency_code",
-                    multiplier=1 / 1_000_000,
-                    description="AdMob estimated_earnings copied into app_daily and converted from currency micros to currency units.",
+                    description="AdMob estimated_earnings from admob_mediation_daily in currency units.",
                 ),
                 _metric(
                     "google_ads_cost_native",
                     "currency",
-                    source_column="cost",
+                    source_column="google_ads_cost_native",
                     aggregation="sum_by_currency",
                     currency_column="cost_currency_code",
-                    description="Google Ads spend copied into app_daily, in source currency.",
+                    description="Google Ads cost_micros from google_ads_campaign_geo_daily in source currency units.",
                 ),
                 _metric(
                     "revenue_usd",
@@ -109,10 +112,10 @@ class FinanceDailyDefinition:
                     null_behavior="Null when spend is not positive or no converted revenue is available.",
                 ),
             ),
-            description="Daily AdMob revenue and Google Ads cost normalized to USD and VND using VND-to-USD FX.",
+            description="Daily AdMob Silver revenue and Google Ads Silver cost normalized to USD and VND using VND-to-USD FX.",
         )
 
-    def build(self, app_daily: Any, fx_daily: Any) -> SemanticTable:
+    def build(self, admob: Any, google_ads: Any, fx_daily: Any) -> SemanticTable:
         fx_rates = (
             fx_daily.filter(
                 (fx_daily.base_currency.upper() == "VND")
@@ -122,23 +125,27 @@ class FinanceDailyDefinition:
                 fx_rate_date=fx_daily.rate_date.cast("date"),
                 fx_rate=fx_daily.rate,
             )
+            .group_by("fx_rate_date")
+            .aggregate(fx_rate=fx_daily.rate.max())
         )
-        joined = app_daily.asof_join(
+
+        grain = ("business_date", "app_id", "country_code")
+        admob_by_currency = admob.group_by(*grain, "currency_code").aggregate(
+            estimated_earnings=admob.estimated_earnings.sum(),
+        )
+        revenue_joined = admob_by_currency.asof_join(
             fx_rates,
-            on=app_daily.business_date >= fx_rates.fx_rate_date,
+            on=admob_by_currency.business_date >= fx_rates.fx_rate_date,
         )
-
-        revenue_currency = joined.revenue_currency_code.upper()
-        cost_currency = joined.cost_currency_code.upper()
-        has_fx = joined.fx_rate.notnull() & (joined.fx_rate > 0)
-
-        revenue = joined.revenue / 1_000_000
+        revenue_currency = revenue_joined.currency_code.upper()
+        revenue_has_fx = revenue_joined.fx_rate.notnull() & (revenue_joined.fx_rate > 0)
+        revenue = revenue_joined.estimated_earnings / 1_000_000
         revenue_usd = ibis.ifelse(
             revenue_currency == "USD",
             revenue,
             ibis.ifelse(
-                (revenue_currency == "VND") & has_fx,
-                revenue * joined.fx_rate,
+                (revenue_currency == "VND") & revenue_has_fx,
+                revenue * revenue_joined.fx_rate,
                 None,
             ),
         )
@@ -146,43 +153,87 @@ class FinanceDailyDefinition:
             revenue_currency == "VND",
             revenue,
             ibis.ifelse(
-                (revenue_currency == "USD") & has_fx,
-                revenue / joined.fx_rate,
+                (revenue_currency == "USD") & revenue_has_fx,
+                revenue / revenue_joined.fx_rate,
                 None,
             ),
         )
+
+        google_ads_by_currency = google_ads.group_by(*grain, "currency_code").aggregate(
+            cost_micros=google_ads.cost_micros.sum(),
+        )
+        cost_joined = google_ads_by_currency.asof_join(
+            fx_rates,
+            on=google_ads_by_currency.business_date >= fx_rates.fx_rate_date,
+        )
+        cost_currency = cost_joined.currency_code.upper()
+        cost_has_fx = cost_joined.fx_rate.notnull() & (cost_joined.fx_rate > 0)
+        cost = cost_joined.cost_micros / 1_000_000
         cost_usd = ibis.ifelse(
             cost_currency == "USD",
-            joined.cost,
+            cost,
             ibis.ifelse(
-                (cost_currency == "VND") & has_fx,
-                joined.cost * joined.fx_rate,
+                (cost_currency == "VND") & cost_has_fx,
+                cost * cost_joined.fx_rate,
                 None,
             ),
         )
         cost_vnd = ibis.ifelse(
             cost_currency == "VND",
-            joined.cost,
+            cost,
             ibis.ifelse(
-                (cost_currency == "USD") & has_fx,
-                joined.cost / joined.fx_rate,
+                (cost_currency == "USD") & cost_has_fx,
+                cost / cost_joined.fx_rate,
                 None,
             ),
         )
 
-        supported_currency = (
-            revenue_currency.isin(("USD", "VND"))
-            | cost_currency.isin(("USD", "VND"))
+        single_revenue_currency = (revenue_currency.nunique() == 1) & ~revenue_currency.isnull().any()
+        single_cost_currency = (cost_currency.nunique() == 1) & ~cost_currency.isnull().any()
+        revenue_by_grain = revenue_joined.group_by(*grain).aggregate(
+            admob_revenue_native=ibis.ifelse(
+                single_revenue_currency,
+                revenue.sum(),
+                None,
+            ),
+            revenue_currency_code=ibis.ifelse(
+                single_revenue_currency,
+                revenue_currency.max(),
+                None,
+            ),
+            revenue_usd=revenue_usd.sum(),
+            revenue_vnd=revenue_vnd.sum(),
         )
+        cost_by_grain = cost_joined.group_by(*grain).aggregate(
+            google_ads_cost_native=ibis.ifelse(
+                single_cost_currency,
+                cost.sum(),
+                None,
+            ),
+            cost_currency_code=ibis.ifelse(
+                single_cost_currency,
+                cost_currency.max(),
+                None,
+            ),
+            cost_usd=cost_usd.sum(),
+            cost_vnd=cost_vnd.sum(),
+        )
+        combined = revenue_by_grain.join(
+            cost_by_grain,
+            predicates=list(grain),
+            how="outer",
+        )
+        joined = combined.asof_join(
+            fx_rates,
+            on=combined.business_date >= fx_rates.fx_rate_date,
+        )
+        supported_currency = joined.revenue_currency_code.upper().isin(("USD", "VND")) | joined.cost_currency_code.upper().isin(("USD", "VND"))
+        has_fx = joined.fx_rate.notnull() & (joined.fx_rate > 0)
         return self.definition.build(
             joined.mutate(
-                revenue_usd=revenue_usd,
-                revenue_vnd=revenue_vnd,
-                cost_usd=cost_usd,
-                cost_vnd=cost_vnd,
                 fx_rate_date=ibis.ifelse(
                     supported_currency & has_fx,
-                    joined.fx_rate_date,
+                    joined.fx_rate_date.cast("date"),
                     None,
                 ),
                 fx_fallback_used=ibis.ifelse(

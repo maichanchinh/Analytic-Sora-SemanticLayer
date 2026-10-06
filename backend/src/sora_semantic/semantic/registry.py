@@ -41,7 +41,8 @@ class SemanticRegistry:
         if name not in self._tables:
             if name == self._finance_definition.name:
                 self._tables[name] = self._finance_definition.build(
-                    self._source.table("app_daily"),
+                    self._source.table("admob_mediation_daily"),
+                    self._source.table("google_ads_campaign_geo_daily"),
                     self._source.table("fx_daily"),
                 )
             else:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -132,6 +133,7 @@ SILVER_DATASETS: tuple[SilverDataset, ...] = (
     SilverDataset("retention", "report/retention", True),
 )
 _DATASETS_BY_NAME = {dataset.name: dataset for dataset in SILVER_DATASETS}
+DEFAULT_CACHE_TTL_SECONDS = 300.0
 
 
 @dataclass(frozen=True)
@@ -152,11 +154,21 @@ def _sql_string(value: str) -> str:
 class SilverDataSource:
     """Expose only catalog-bound reads from the configured Silver bucket."""
 
-    def __init__(self, settings: SilverSettings, database_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        settings: SilverSettings,
+        database_path: Path | None = None,
+        *,
+        cache_ttl_seconds: float = DEFAULT_CACHE_TTL_SECONDS,
+    ) -> None:
+        if cache_ttl_seconds <= 0:
+            raise ValueError("cache_ttl_seconds must be positive")
         self._settings = settings
         self._database_path = database_path
+        self._cache_ttl_seconds = cache_ttl_seconds
         self._backend: Backend | None = None
         self._tables: dict[str, Table] = {}
+        self._cache_refreshed_at: dict[str, float] = {}
 
     @classmethod
     def from_env(
@@ -231,6 +243,8 @@ class SilverDataSource:
         dataset = _DATASETS_BY_NAME.get(name)
         if dataset is None:
             raise KeyError(f"Unknown Silver catalog dataset: {name}")
+        if self._database_path is not None:
+            self.refresh_expired_cached_datasets()
         if name in self._tables:
             return self._tables[name]
         if self._database_path is not None:
@@ -268,6 +282,26 @@ class SilverDataSource:
         for name in sorted(cached_names | {"dim_app"}):
             self._refresh_cached_table(name)
 
+    def refresh_expired_cached_datasets(self) -> None:
+        """Refresh materialized Silver tables whose short cache TTL has elapsed."""
+        if self._database_path is None:
+            return
+        backend = self._require_backend()
+        rows = backend.raw_sql(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()
+        now = time.monotonic()
+        cached_names = sorted(
+            row[0][len("_sora_cache_") :]
+            for row in rows
+            if row[0].startswith("_sora_cache_")
+            and row[0][len("_sora_cache_") :] in _DATASETS_BY_NAME
+        )
+        for name in cached_names:
+            refreshed_at = self._cache_refreshed_at.get(name)
+            if refreshed_at is None or now - refreshed_at >= self._cache_ttl_seconds:
+                self._refresh_cached_table(name)
+
     def _refresh_cached_table(self, name: str) -> Table:
         backend = self._require_backend()
         dataset = _DATASETS_BY_NAME.get(name)
@@ -284,9 +318,11 @@ class SilverDataSource:
             )
             table = backend.table(table_name)
             self._tables[name] = table
+            self._cache_refreshed_at[name] = time.monotonic()
             return table
         except Exception as error:
             self._tables.pop(name, None)
+            self._cache_refreshed_at.pop(name, None)
             raise SilverReadError(
                 f"Could not refresh Silver dataset {name!r} "
                 f"(DuckDB {type(error).__name__}); verify Silver read access"

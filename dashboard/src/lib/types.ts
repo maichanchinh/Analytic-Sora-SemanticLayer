@@ -15,6 +15,7 @@ export interface DashboardWidget {
   compare_previous?: boolean;
   trailing_days?: number;
   span?: number;
+  unavailable_metrics?: string[];
 }
 
 export interface DashboardConfig {

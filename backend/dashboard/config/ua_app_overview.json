@@ -34,7 +34,6 @@
       "model": "finance_daily",
       "metrics": ["cost_usd", "revenue_usd", "profit_usd"],
       "dimensions": ["business_date"],
-      "trailing_days": 7,
       "span": 6
     },
     {
@@ -45,14 +44,13 @@
       "model": "finance_daily",
       "metrics": ["cost_vnd", "revenue_vnd", "profit_vnd"],
       "dimensions": ["business_date"],
-      "trailing_days": 7,
       "span": 6
     },
     {
       "id": "app_performance",
-      "section": "App Performance",
+      "section": "App Monetization",
       "type": "table",
-      "title": "Estimated Earnings and Impressions by App",
+      "title": "AdMob Earnings and Impressions by App",
       "model": "admob_mediation_daily",
       "metrics": ["estimated_earnings", "impressions"],
       "dimensions": ["app_id", "currency_code"],
@@ -60,13 +58,24 @@
       "span": 12
     },
     {
-      "id": "product_engagement",
-      "section": "Product Engagement",
-      "type": "metric",
-      "title": "Users and Sessions",
+      "id": "app_performance_users",
+      "section": "App Performance",
+      "type": "table",
+      "title": "Users, Sessions and Engagement by App",
       "model": "ga4_daily_overview",
-      "metrics": ["active_users", "new_users", "sessions"],
-      "dimensions": [],
+      "metrics": ["active_users", "new_users", "sessions", "engaged_sessions"],
+      "dimensions": ["app_id"],
+      "unavailable_metrics": ["returning_users", "new_users / active_users", "total_users", "engagement_rate", "average_engagement_duration", "traffic_source · Organic Search", "traffic_source · in_house", "traffic_source · all", "traffic_source · ads"],
+      "span": 12
+    },
+    {
+      "id": "app_performance_retention",
+      "section": "App Performance",
+      "type": "table",
+      "title": "Retention by App and Cohort Day",
+      "model": "ga4_retention_cohort",
+      "metrics": ["retention_rate"],
+      "dimensions": ["app_id", "cohort_day"],
       "span": 12
     },
     {
@@ -98,42 +107,6 @@
       "metrics": ["impressions", "clicks", "impression_ctr", "observed_ecpm"],
       "dimensions": [],
       "span": 12
-    },
-    {
-      "id": "retention_d1",
-      "section": "Retention",
-      "type": "metric",
-      "title": "Retention · D1",
-      "model": "ga4_retention_cohort",
-      "metrics": ["retention_rate"],
-      "dimensions": [],
-      "query_filters": { "cohort_day": 1 },
-      "ignore_date_range": true,
-      "span": 4
-    },
-    {
-      "id": "retention_d7",
-      "section": "Retention",
-      "type": "metric",
-      "title": "Retention · D7",
-      "model": "ga4_retention_cohort",
-      "metrics": ["retention_rate"],
-      "dimensions": [],
-      "query_filters": { "cohort_day": 7 },
-      "ignore_date_range": true,
-      "span": 4
-    },
-    {
-      "id": "retention_d30",
-      "section": "Retention",
-      "type": "metric",
-      "title": "Retention · D30",
-      "model": "ga4_retention_cohort",
-      "metrics": ["retention_rate"],
-      "dimensions": [],
-      "query_filters": { "cohort_day": 30 },
-      "ignore_date_range": true,
-      "span": 4
     }
   ]
 }

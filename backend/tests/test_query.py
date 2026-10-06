@@ -219,23 +219,45 @@ class RegistryBackedQueryTests(unittest.TestCase):
 
     def setUp(self):
         self.backend = ibis.duckdb.connect()
-        self.app_daily = self.backend.create_table(
-            "app_daily",
+        self.admob_mediation_daily = self.backend.create_table(
+            "admob_mediation_daily",
             [
                 {
                     "business_date": date(2026, 10, 1), "app_id": "app", "country_code": "US",
-                    "revenue_currency_code": "VND", "cost_currency_code": "VND",
-                    "revenue": 100_000.0, "cost": 50_000.0,
+                    "currency_code": "USD", "estimated_earnings": 1_000_000.0,
                 },
                 {
                     "business_date": date(2026, 10, 2), "app_id": "app", "country_code": "US",
-                    "revenue_currency_code": "VND", "cost_currency_code": "VND",
-                    "revenue": 1_600_000.0, "cost": 200_000.0,
+                    "currency_code": "VND", "estimated_earnings": 1_600_000.0,
                 },
                 {
                     "business_date": date(2026, 10, 3), "app_id": "app", "country_code": "US",
-                    "revenue_currency_code": "GBP", "cost_currency_code": "VND",
-                    "revenue": 25.0, "cost": 50_000.0,
+                    "currency_code": "GBP", "estimated_earnings": 25_000_000.0,
+                },
+                {
+                    "business_date": date(2026, 10, 5), "app_id": "app", "country_code": "US",
+                    "currency_code": "USD", "estimated_earnings": 24_336_055.0,
+                },
+            ],
+        )
+        self.google_ads_campaign_geo_daily = self.backend.create_table(
+            "google_ads_campaign_geo_daily",
+            [
+                {
+                    "business_date": date(2026, 10, 1), "app_id": "app", "country_code": "US",
+                    "campaign_id": "c1", "currency_code": "VND", "cost_micros": 50_000_000_000,
+                },
+                {
+                    "business_date": date(2026, 10, 2), "app_id": "app", "country_code": "US",
+                    "campaign_id": "c1", "currency_code": "VND", "cost_micros": 200_000_000_000,
+                },
+                {
+                    "business_date": date(2026, 10, 3), "app_id": "app", "country_code": "US",
+                    "campaign_id": "c1", "currency_code": "VND", "cost_micros": 50_000_000_000,
+                },
+                {
+                    "business_date": date(2026, 10, 5), "app_id": "app", "country_code": "US",
+                    "campaign_id": "c1", "currency_code": "VND", "cost_micros": 663_637_000_000,
                 },
             ],
         )
@@ -244,7 +266,11 @@ class RegistryBackedQueryTests(unittest.TestCase):
             [{"base_currency": "VND", "quote_currency": "USD", "rate_date": date(2026, 10, 1), "rate": 0.00002}],
         )
         self.source = InMemorySilverSource(
-            {"app_daily": self.app_daily, "fx_daily": self.fx_daily}
+            {
+                "admob_mediation_daily": self.admob_mediation_daily,
+                "google_ads_campaign_geo_daily": self.google_ads_campaign_geo_daily,
+                "fx_daily": self.fx_daily,
+            }
         )
         self.registry = SemanticRegistry(self.source)
         self.service = QueryService(self.registry)
@@ -266,9 +292,29 @@ class RegistryBackedQueryTests(unittest.TestCase):
         self.assertEqual(set(by_date), {"2026-10-02", "2026-10-03"})
         self.assertEqual(by_date["2026-10-02"]["fx_rate_date"], "2026-10-01")
         self.assertTrue(by_date["2026-10-02"]["fx_fallback_used"])
-        self.assertEqual(by_date["2026-10-02"]["revenue_usd"], 32.0)
+        self.assertAlmostEqual(by_date["2026-10-02"]["revenue_usd"], 0.000032)
         self.assertIsNone(by_date["2026-10-03"]["revenue_usd"])
         self.assertEqual(result.metrics[0]["unit"], "USD")
+
+    def test_finance_daily_uses_direct_admob_and_google_ads_silver_micros(self):
+        result = self.service.query(
+            QueryRequest(
+                model="finance_daily",
+                metrics=("admob_revenue_native", "google_ads_cost_native", "revenue_usd", "revenue_vnd", "cost_vnd"),
+                dimensions=("business_date",),
+                date_range=DateRange("2026-10-05", "2026-10-05"),
+            )
+        )
+
+        self.assertAlmostEqual(result.rows[0]["admob_revenue_native"], 24.336055)
+        self.assertAlmostEqual(result.rows[0]["google_ads_cost_native"], 663_637)
+        self.assertAlmostEqual(result.rows[0]["revenue_usd"], 24.336055)
+        self.assertAlmostEqual(result.rows[0]["revenue_vnd"], 1_216_802.75)
+        self.assertAlmostEqual(result.rows[0]["cost_vnd"], 663_637)
+        self.assertEqual(
+            self.registry.describe("finance_daily")["source_tables"],
+            ["admob_mediation_daily", "google_ads_campaign_geo_daily", "fx_daily"],
+        )
 
     def test_real_registry_period_roas_uses_totals_and_native_mixed_currency_is_null(self):
         total = self.service.query(
@@ -290,11 +336,11 @@ class RegistryBackedQueryTests(unittest.TestCase):
             QueryRequest(model="finance_daily", metrics=("admob_revenue_native",))
         )
 
-        self.assertAlmostEqual(total.rows[0]["roas_usd"], 6.8)
-        self.assertEqual(
-            {row["business_date"]: row["roas_usd"] for row in daily.rows},
-            {"2026-10-01": 2.0, "2026-10-02": 8.0},
-        )
+        self.assertAlmostEqual(total.rows[0]["roas_usd"], 1.000032 / 5)
+        daily_roas = {row["business_date"]: row["roas_usd"] for row in daily.rows}
+        self.assertEqual(set(daily_roas), {"2026-10-01", "2026-10-02"})
+        self.assertAlmostEqual(daily_roas["2026-10-01"], 1.0)
+        self.assertAlmostEqual(daily_roas["2026-10-02"], 0.000008)
         self.assertIsNone(native.rows[0]["admob_revenue_native"])
 
     def test_registry_query_returns_supported_result_metadata_and_rejects_unknown_model(self):
