@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from datetime import timedelta
 import os
 from pathlib import Path
 from threading import RLock
@@ -53,9 +54,15 @@ class QueryRequestBody(BaseModel):
         default=None,
         description="Optional inclusive range applied to the model time dimension.",
     )
+    compare_previous_period: bool = Field(
+        default=False,
+        description="Include per-dimension comparisons with the immediately preceding period of equal length.",
+    )
 
     def to_query_request(self) -> QueryRequest:
-        return QueryRequest.from_mapping(self.model_dump(mode="python", by_alias=True))
+        return QueryRequest.from_mapping(
+            self.model_dump(mode="python", by_alias=True, exclude={"compare_previous_period"})
+        )
 
 
 def _default_source_factory() -> SilverDataSource:
@@ -152,33 +159,45 @@ def create_app(
         request: Request,
         payload: QueryRequestBody = Body(
             openapi_examples={
-                "finance_summary": {
-                    "summary": "Finance summary",
-                    "description": "Totals normalized to USD over an inclusive date range.",
+                "app_daily_live_sample": {
+                    "summary": "App daily: live Charge Speed sample",
+                    "description": "Real Silver row for 2026-10-05; shows native revenue and cost currencies.",
                     "value": {
-                        "model": "finance_daily",
-                        "metrics": ["revenue_usd", "cost_usd", "roas_usd"],
-                        "date_range": {"from": "2026-10-01", "to": "2026-10-03"},
+                        "model": "app_daily",
+                        "metrics": ["admob_revenue_native", "google_ads_cost_native"],
+                        "dimensions": [
+                            "business_date",
+                            "app_id",
+                            "revenue_currency_code",
+                            "cost_currency_code",
+                        ],
+                        "filters": {"app_id": "com.chargespeed.charge"},
+                        "date_range": {"from": "2026-10-05", "to": "2026-10-05"},
                     },
                 },
                 "campaign_geo": {
-                    "summary": "Campaign spend by country",
-                    "description": "Break down campaign spend by campaign and country.",
+                    "summary": "Campaign spend: live campaign and country",
+                    "description": "Real Silver row for Charge Speed-Global-IAA in KM on 2026-10-05.",
                     "value": {
                         "model": "campaign_geo",
                         "metrics": ["campaign_spend"],
                         "dimensions": ["campaign_name", "country_code", "currency_code"],
-                        "date_range": {"from": "2026-10-01", "to": "2026-10-03"},
+                        "filters": {
+                            "campaign_name": "Charge Speed-Global-IAA",
+                            "country_code": "KM",
+                        },
+                        "date_range": {"from": "2026-10-05", "to": "2026-10-05"},
                     },
                 },
                 "retention_cohort": {
-                    "summary": "Retention by cohort day",
-                    "description": "Compare retained users and retention rate by cohort day.",
+                    "summary": "Retention: live Charge Speed cohort",
+                    "description": "Real GA4 cohort for Charge Speed in ZZ on 2026-08-01.",
                     "value": {
                         "model": "ga4_retention_cohort",
                         "metrics": ["cohort_users", "retained_users", "retention_rate"],
                         "dimensions": ["cohort_date", "cohort_day"],
-                        "date_range": {"from": "2026-10-01", "to": "2026-10-03"},
+                        "filters": {"app_id": "com.chargespeed.charge", "country_code": "ZZ"},
+                        "date_range": {"from": "2026-08-01", "to": "2026-08-01"},
                     },
                 },
             }
@@ -190,12 +209,34 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(error)) from None
 
         result = _execute_app_query(request.app, query)
-        return {
+        response: dict[str, Any] = {
             "model": result.model,
             "dimensions": result.dimensions,
             "metrics": result.metrics,
             "rows": result.rows,
         }
+        if payload.compare_previous_period:
+            if query.date_range is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="compare_previous_period requires date_range.",
+                )
+            start = QueryService._parse_date(query.date_range.from_, "date_range.from")
+            end = QueryService._parse_date(query.date_range.to, "date_range.to")
+            period_days = (end - start).days + 1
+            previous_request = QueryRequest(
+                model=query.model,
+                metrics=query.metrics,
+                dimensions=query.dimensions,
+                filters=query.filters,
+                date_range=type(query.date_range)(
+                    from_=start - timedelta(days=period_days),
+                    to=start - timedelta(days=1),
+                ),
+            )
+            previous = _execute_app_query(request.app, previous_request)
+            response["comparisons"] = _build_comparisons(result, previous)
+        return response
 
     @app.get("/api/v1/dashboards")
     def list_dashboards(request: Request) -> dict[str, list[dict[str, str]]]:
@@ -239,6 +280,44 @@ def _execute_query(service: QueryService, query: QueryRequest) -> QueryResult:
             status_code=503,
             detail="Silver data source is unavailable.",
         ) from None
+
+
+def _build_comparisons(current: QueryResult, previous: QueryResult) -> list[dict[str, Any]]:
+    """Join previous-period metric values to current rows by requested dimensions."""
+    dimension_names = tuple(item["name"] for item in current.dimensions)
+    metric_names = tuple(item["name"] for item in current.metrics)
+
+    def key(row: dict[str, Any]) -> tuple[Any, ...]:
+        return tuple(row.get(name) for name in dimension_names)
+
+    previous_by_key = {key(row): row for row in previous.rows}
+    comparisons: list[dict[str, Any]] = []
+    for row in current.rows:
+        previous_row = previous_by_key.get(key(row), {})
+        values: dict[str, dict[str, float | None]] = {}
+        for name in metric_names:
+            before = previous_row.get(name)
+            now = row.get(name)
+            before_number = float(before) if isinstance(before, int | float) else None
+            now_number = float(now) if isinstance(now, int | float) else None
+            delta = now_number - before_number if now_number is not None and before_number is not None else None
+            percent = (
+                delta / abs(before_number) * 100
+                if delta is not None and before_number != 0
+                else None
+            )
+            values[name] = {
+                "previous": before_number,
+                "delta": delta,
+                "percent_change": percent,
+            }
+        comparisons.append(
+            {
+                "dimensions": {name: row.get(name) for name in dimension_names},
+                "metrics": values,
+            }
+        )
+    return comparisons
 
 
 app = create_app()

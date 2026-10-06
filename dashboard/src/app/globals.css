@@ -32,9 +32,19 @@ h1 { font-family: Manrope, sans-serif; font-size: clamp(24px,3vw,31px); letter-s
 .filter-panel label { display: grid; gap: 7px; color: #788398; font-size: 10px; font-weight: 700; letter-spacing: .04em; min-width: 140px; }
 .filter-panel select, .filter-panel input { height: 38px; min-width: 150px; border: 1px solid #e2e7ef; background: #fff; border-radius: 7px; padding: 0 10px; color: #26344c; font-size: 12px; outline: none; }
 .filter-panel select:focus, .filter-panel input:focus { border-color: #8ab1ff; box-shadow: 0 0 0 3px #3478f61a; }
+.country-filter { position: relative; min-width: 180px; }
+.country-filter summary { list-style: none; height: 38px; padding: 0 10px; border: 1px solid #e2e7ef; border-radius: 7px; background: #fff; color: #26344c; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-size: 12px; }
+.country-filter summary::-webkit-details-marker { display: none; }
+.country-filter summary span { color: #788398; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+.country-filter summary strong { font-size: 12px; font-weight: 600; }
+.country-options { position: absolute; z-index: 5; top: calc(100% + 5px); left: 0; width: min(290px, 80vw); max-height: 300px; overflow: auto; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 8px 24px #1627441a; }
+.country-options label { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px; color: #445168; font-size: 12px; font-weight: 500; letter-spacing: 0; cursor: pointer; }
+.country-options input { width: 14px; min-width: 14px; height: 14px; margin: 0; }
+.country-options button { margin: 6px; border: 0; background: transparent; color: #2867e9; font-size: 12px; cursor: pointer; }
 .date-filter { display: flex; gap: 10px; }
 .date-filter label { min-width: 140px; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin: 29px 0 15px; }
+.dashboard-section + .dashboard-section .section-heading { margin-top: 34px; }
 .section-heading h2 { font: 700 16px Manrope, sans-serif; }
 .section-heading p { font-size: 11px; margin-top: 5px; }
 .result-count { color: #8791a3; font-size: 11px; }
@@ -47,8 +57,11 @@ h1 { font-family: Manrope, sans-serif; font-size: clamp(24px,3vw,31px); letter-s
 .metric-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; }
 .metric-item { min-height: 83px; padding: 12px; border-radius: 9px; background: #f8faff; display: flex; flex-direction: column; justify-content: center; gap: 7px; }
 .metric-item span { color: #778197; font-size: 10px; text-transform: capitalize; }
-.metric-item strong { font: 700 20px Manrope, sans-serif; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.metric-item strong { font: 700 clamp(13px,1.35vw,20px) Manrope, sans-serif; letter-spacing: -.035em; white-space: nowrap; }
 .metric-item small { color: #9ba4b2; font-size: 9px; }
+.metric-item .metric-change, td .metric-change { color: #238b65; font-size: 10px; font-weight: 600; }
+.metric-item .metric-change.negative, td .metric-change.negative { color: #c2545b; }
+.metric-item .change-unavailable, td .change-unavailable { color: #9ba4b2; font-size: 9px; }
 .chart { height: 252px; width: 100%; color: #788398; font-size: 10px; }
 .table-scroll { overflow: auto; max-height: 370px; }
 table { border-collapse: collapse; width: 100%; font-size: 11px; white-space: nowrap; }

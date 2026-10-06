@@ -81,9 +81,9 @@ Dimensions route dùng cùng shape `models`, với key `dimensions` thay cho `me
 
 ### `POST /api/v1/query`
 
-Request schema hiển thị trong Swagger UI tại `/docs`. Dropdown Example Value có thể chọn payload mẫu cho finance, campaign geo và retention. Các ví dụ query Silver hiện có, không nạp dữ liệu giả.
+Request schema hiển thị trong Swagger UI tại `/docs`. Dropdown Example Value có ba request mẫu lấy từ Silver thật: `app_daily`, `campaign_geo` và `ga4_retention_cohort`. Snapshot mẫu được đọc ngày `2026-10-05`; khi dùng Swagger, chọn **Try it out** rồi **Execute** để chạy request và xem rows trả về. Chỉ chọn example sẽ điền payload, không tự gửi request.
 
-Body theo shared `QueryRequest`: `model`, `metrics`, `dimensions`, `filters`, `date_range`.
+Body gồm `model`, `metrics`, `dimensions`, `filters`, `date_range` và tùy chọn `compare_previous_period` (mặc định `false`). Khi bật, `comparisons` ghép theo dimensions và trả mỗi metric các giá trị `previous`, `delta`, `percent_change`; kỳ trước có cùng số ngày và liền trước kỳ hiện tại. Nếu thiếu metric hoặc kỳ trước bằng 0, `percent_change` là `null`.
 
 ```json
 {

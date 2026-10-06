@@ -54,6 +54,8 @@ class MetricDefinition:
             expression = self._sum_preserve_null
         elif self.aggregation == "difference_preserve_null":
             expression = self._difference_preserve_null
+        elif self.aggregation == "difference":
+            expression = lambda table: table[self.source_column].sum() - table[self.denominator_column].sum()
         elif self.aggregation == "sum_by_currency":
             expression = self._sum_by_currency
         elif self.aggregation == "sum_by_group_column":
@@ -76,9 +78,12 @@ class MetricDefinition:
         return Measure(expr=expression, description=self.description, metadata=metadata)
 
     def _sum_by_currency(self, table):
+        source_has_value = table[self.source_column].notnull()
+        currency = ibis.ifelse(source_has_value, table[self.currency_column], None)
         value = table[self.source_column].sum()
-        currency = table[self.currency_column]
-        has_single_currency = (currency.nunique() == 1) & ~currency.isnull().any()
+        has_single_currency = (currency.nunique() == 1) & ~(
+            source_has_value & table[self.currency_column].isnull()
+        ).any()
         return ibis.ifelse(has_single_currency, value, None)
 
     def _sum_by_group_column(self, table):

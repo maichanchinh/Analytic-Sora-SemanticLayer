@@ -9,6 +9,11 @@ export interface DashboardWidget {
   metrics: string[];
   dimensions: string[];
   filters?: string[];
+  query_filters?: Record<string, string | string[] | number | number[]>;
+  ignore_date_range?: boolean;
+  section?: string;
+  compare_previous?: boolean;
+  trailing_days?: number;
   span?: number;
 }
 
@@ -30,6 +35,10 @@ export interface QueryResult {
   dimensions: FieldMetadata[];
   metrics: FieldMetadata[];
   rows: Array<Record<string, unknown>>;
+  comparisons?: Array<{
+    dimensions: Record<string, unknown>;
+    metrics: Record<string, { previous: number | null; delta: number | null; percent_change: number | null }>;
+  }>;
 }
 
 export interface FieldMetadata {
@@ -47,7 +56,7 @@ export interface DateRange {
 
 export interface DashboardFilters {
   app_id: string;
-  country_code: string;
+  country_code: string | string[];
   date_range: DateRange;
   campaign_id: string;
   cohort_day: string;
@@ -57,6 +66,7 @@ export interface QueryRequest {
   model: string;
   metrics: string[];
   dimensions: string[];
-  filters: Record<string, string>;
+  filters: Record<string, string | string[] | number | number[]>;
   date_range?: DateRange;
+  compare_previous_period?: boolean;
 }

@@ -97,7 +97,7 @@ export async function getCampaigns(
     dimensions: ["campaign_id", "campaign_name"],
     filters: {
       ...(filters.app_id ? { app_id: filters.app_id } : {}),
-      ...(filters.country_code ? { country_code: filters.country_code } : {}),
+      ...(filters.country_code.length ? { country_code: filters.country_code } : {}),
     },
     date_range: filters.date_range,
   });
@@ -114,6 +114,6 @@ import type { DateRange } from "@/lib/types";
 
 interface DashboardFiltersForOptions {
   app_id: string;
-  country_code: string;
+  country_code: string | string[];
   date_range: DateRange;
 }

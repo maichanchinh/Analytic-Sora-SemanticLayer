@@ -9,7 +9,7 @@ import { initialDateRange, queryForWidget } from "@/lib/query";
 import type { AppOption, DashboardConfig, DashboardFilters } from "@/lib/types";
 
 const emptyFilters = (): DashboardFilters => ({
-  app_id: "", country_code: "", date_range: initialDateRange(), campaign_id: "", cohort_day: "",
+  app_id: "", country_code: [], date_range: initialDateRange(), campaign_id: "", cohort_day: "",
 });
 
 export function DashboardClient() {
@@ -65,7 +65,9 @@ export function DashboardClient() {
         return [widget.id, { status: "error", message: `Unsupported widget type: ${widget.type}` } satisfies WidgetState] as const;
       }
       try {
-        const result = await runQuery(queryForWidget(widget, filters, dimensions[widget.model] ?? new Set()));
+        const modelDimensions = dimensions[widget.model] ?? new Set();
+        const request = queryForWidget(widget, filters, modelDimensions);
+        const result = await runQuery({ ...request, ...(widget.compare_previous ? { compare_previous_period: true } : {}) });
         return [widget.id, { status: "success", result } satisfies WidgetState] as const;
       } catch (error) {
         return [widget.id, { status: "error", message: error instanceof Error ? error.message : "Widget query failed." } satisfies WidgetState] as const;
@@ -102,9 +104,9 @@ export function DashboardClient() {
         {loadingDashboard && <div className="page-state">Loading dashboard configuration…</div>}
         {pageError && <div className="page-error" role="alert"><strong>Dashboard unavailable</strong><span>{pageError}</span></div>}
         {config && !loadingDashboard && <>
-          <div className="page-title-row"><div><div className="eyebrow">PERFORMANCE OVERVIEW</div><h1>{config.title}</h1><p>Monitor revenue, acquisition and engagement across your apps.</p></div><div className="updated-badge"><span className="status-dot" /> API data</div></div>
+          <div className="page-title-row"><div><div className="eyebrow">PERFORMANCE OVERVIEW</div><h1>{config.title}</h1><p>Monitor revenue, cost and ROAS across your apps.</p></div><div className="updated-badge"><span className="status-dot" /> API data</div></div>
           <Filters config={config} filters={filters} apps={apps} countries={countries} campaigns={campaigns} onChange={setFilters} />
-          <DashboardRenderer config={config} widgetStates={widgetStates} />
+          <DashboardRenderer config={config} widgetStates={widgetStates} apps={apps} />
         </>}
         <footer className="page-footer">Data served by Sora Semantic Layer · Read-only Silver analytics</footer>
       </div>

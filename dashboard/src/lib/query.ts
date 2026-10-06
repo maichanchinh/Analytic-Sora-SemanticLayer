@@ -6,10 +6,17 @@ export function queryForWidget(
   modelDimensions: ReadonlySet<string>,
 ): QueryRequest {
   const allowedFilters = new Set(widget.filters ?? []);
-  const queryFilters: Record<string, string> = {};
+  const queryFilters: Record<string, string | string[] | number | number[]> = Object.fromEntries(
+    Object.entries(widget.query_filters ?? {}).filter(([name]) => modelDimensions.has(name)),
+  );
 
-  for (const name of ["app_id", "country_code"] as const) {
-    if (filters[name] && modelDimensions.has(name)) queryFilters[name] = filters[name];
+  if (filters.app_id && modelDimensions.has("app_id")) queryFilters.app_id = filters.app_id;
+  if (modelDimensions.has("country_code")) {
+    if (Array.isArray(filters.country_code) && filters.country_code.length) {
+      queryFilters.country_code = filters.country_code;
+    } else if (typeof filters.country_code === "string" && filters.country_code) {
+      queryFilters.country_code = filters.country_code;
+    }
   }
   if (filters.campaign_id && allowedFilters.has("campaign_id") && modelDimensions.has("campaign_id")) {
     queryFilters.campaign_id = filters.campaign_id;
@@ -18,27 +25,50 @@ export function queryForWidget(
     queryFilters.cohort_day = filters.cohort_day;
   }
 
+  const dateRange = widget.trailing_days
+    ? { from: shiftDate(filters.date_range.from, -(widget.trailing_days - 1)), to: filters.date_range.to }
+    : filters.date_range;
+
   return {
     model: widget.model,
     metrics: widget.metrics,
     dimensions: widget.dimensions,
     filters: queryFilters,
-    ...(modelDimensions.has("business_date") || modelDimensions.has("cohort_date")
-      ? { date_range: filters.date_range }
+    ...(!widget.ignore_date_range && (modelDimensions.has("business_date") || modelDimensions.has("cohort_date"))
+      ? { date_range: dateRange }
       : {}),
   };
 }
 
 export function initialDateRange(now = new Date()): { from: string; to: string } {
-  const end = new Date(now);
-  const start = new Date(now);
-  start.setDate(start.getDate() - 29);
-  return { from: localDate(start), to: localDate(end) };
+  const today = businessDate(now);
+  return { from: today, to: today };
+}
+
+export function shiftDate(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return localDate(date);
+}
+
+export function comparisonDateRange(range: DateRange): DateRange {
+  return { from: shiftDate(range.from, -1), to: shiftDate(range.to, -1) };
 }
 
 function localDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function businessDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }

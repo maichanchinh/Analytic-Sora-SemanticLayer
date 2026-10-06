@@ -108,7 +108,14 @@ SILVER_SEMANTIC_DEFINITIONS: tuple[SilverSemanticDefinition, ...] = (
         metrics=(
             _metric("ad_requests", "requests"),
             _metric("clicks", "clicks"),
-            _metric("estimated_earnings", "currency", aggregation="sum_by_currency", currency_column="currency_code"),
+            _metric(
+                "estimated_earnings",
+                "currency",
+                aggregation="scaled_sum",
+                currency_column="currency_code",
+                multiplier=1 / 1_000_000,
+                description="AdMob estimated earnings, converted from currency micros to currency units.",
+            ),
             _metric("impressions", "impressions"),
             _metric("matched_requests", "requests"),
             _metric(
@@ -134,7 +141,7 @@ SILVER_SEMANTIC_DEFINITIONS: tuple[SilverSemanticDefinition, ...] = (
                 currency_column="currency_code",
                 numerator_column="estimated_earnings",
                 denominator_column="impressions",
-                multiplier=1000.0,
+                multiplier=1 / 1_000,
                 null_behavior="Null when impressions is zero or currencies are mixed.",
             ),
         ),
@@ -186,7 +193,7 @@ SILVER_SEMANTIC_DEFINITIONS: tuple[SilverSemanticDefinition, ...] = (
             for column in ("business_date", "app_id", "country_code", "revenue_currency_code", "cost_currency_code")
         ),
         metrics=(
-            _metric("admob_revenue_native", "currency", source_column="revenue", aggregation="sum_by_currency", currency_column="revenue_currency_code", description="AdMob estimated_earnings copied into report/app_daily; native currency."),
+            _metric("admob_revenue_native", "currency", source_column="revenue", aggregation="scaled_sum", currency_column="revenue_currency_code", multiplier=1 / 1_000_000, description="AdMob estimated_earnings copied into report/app_daily and converted from currency micros to currency units."),
             _metric("google_ads_cost_native", "currency", source_column="cost", aggregation="sum_by_currency", currency_column="cost_currency_code", description="Google Ads cost_micros converted to source-currency units in report/app_daily."),
             _metric(
                 "reported_roas_native",
