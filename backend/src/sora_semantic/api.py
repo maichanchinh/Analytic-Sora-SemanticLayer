@@ -66,16 +66,7 @@ class QueryRequestBody(BaseModel):
 
 
 def _default_source_factory() -> SilverDataSource:
-    backend_dir = Path(__file__).resolve().parents[2]
-    configured_path = os.environ.get("SORASEMANTIC_DUCKDB_PATH", "").strip()
-    cache_path = (
-        Path(configured_path)
-        if configured_path
-        else backend_dir / ".cache" / "sora-semantic.duckdb"
-    )
-    if not cache_path.is_absolute():
-        cache_path = backend_dir / cache_path
-    return SilverDataSource.from_env(database_path=cache_path)
+    return SilverDataSource.from_env()
 
 
 def create_app(
@@ -90,9 +81,9 @@ def create_app(
         source = source_factory()
         try:
             source.connect()
-            refresh_cached_datasets = getattr(source, "refresh_cached_datasets", None)
-            if refresh_cached_datasets is not None:
-                refresh_cached_datasets()
+            validate_read_access = getattr(source, "validate_read_access", None)
+            if validate_read_access is not None:
+                validate_read_access()
             app.state.silver_source = source
             app.state.semantic_registry = SemanticRegistry(source)
             app.state.query_service = QueryService(app.state.semantic_registry)
@@ -123,7 +114,6 @@ def create_app(
     def list_apps(request: Request) -> dict[str, list[dict[str, Any]]]:
         try:
             with request.app.state.query_lock:
-                _refresh_expired_silver_cache(request.app)
                 apps = request.app.state.query_service.query(
                     QueryRequest(
                         model="dim_app",
@@ -274,22 +264,9 @@ def create_app(
 
 
 def _execute_app_query(app: FastAPI, query: QueryRequest) -> QueryResult:
-    # QueryService lazily caches semantic tables; serialize access to its registry.
+    # QueryService lazily caches direct Silver table expressions; serialize registry access.
     with app.state.query_lock:
-        try:
-            _refresh_expired_silver_cache(app)
-        except SilverReadError:
-            raise HTTPException(
-                status_code=503,
-                detail="Silver data source is unavailable.",
-            ) from None
         return _execute_query(app.state.query_service, query)
-
-
-def _refresh_expired_silver_cache(app: FastAPI) -> None:
-    refresh = getattr(app.state.silver_source, "refresh_expired_cached_datasets", None)
-    if refresh is not None:
-        refresh()
 
 
 def _execute_query(service: QueryService, query: QueryRequest) -> QueryResult:

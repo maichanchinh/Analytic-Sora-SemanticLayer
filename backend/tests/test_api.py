@@ -55,18 +55,26 @@ class InMemorySilverSource:
         self.backend = ibis.duckdb.connect()
         self.connected = False
         self.closed = False
+        self._tables = {}
 
     def connect(self):
         self.connected = True
         return self
 
     def table(self, name: str):
+        if name in self._tables:
+            return self._tables[name]
         if name == "dim_app":
-            return self.backend.create_table(name, APP_ROWS)
-        if name == "dim_date":
-            return self.backend.create_table(name, DATE_ROWS)
+            table = self.backend.create_table(name, APP_ROWS)
+        elif name == "dim_date":
+            table = self.backend.create_table(name, DATE_ROWS)
         else:
             raise KeyError(name)
+        self._tables[name] = table
+        return table
+
+    def validate_read_access(self) -> None:
+        self.table("dim_app").limit(1).execute()
 
     def close(self) -> None:
         self.closed = True
@@ -74,18 +82,24 @@ class InMemorySilverSource:
 
 
 class UnavailableSilverSource(InMemorySilverSource):
+    def validate_read_access(self) -> None:
+        pass
+
     def table(self, name: str):
         raise SilverReadError("Could not register Silver dataset 'dim_app'.")
 
 
+class StartupUnavailableSilverSource(InMemorySilverSource):
+    def validate_read_access(self) -> None:
+        raise SilverReadError("Silver read permission denied.")
+
+
 class BrokenSilverSource(InMemorySilverSource):
+    def validate_read_access(self) -> None:
+        pass
+
     def table(self, name: str):
         raise RuntimeError("private connection detail")
-
-
-class ExpiredCacheFailureSilverSource(InMemorySilverSource):
-    def refresh_expired_cached_datasets(self) -> None:
-        raise SilverReadError("expired cache could not be refreshed")
 
 
 @asynccontextmanager
@@ -155,16 +169,14 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["rows"], [{"app_id": "app.a", "display_name": "Alpha"}])
         self.assertEqual([item["name"] for item in body["dimensions"]], ["app_id", "display_name"])
 
-    async def test_expired_cache_refresh_failure_returns_503(self) -> None:
-        source = ExpiredCacheFailureSilverSource()
-        async with api_client(create_app(source_factory=lambda: source)) as client:
-            response = await client.post(
-                "/api/v1/query",
-                json={"model": "dim_app", "dimensions": ["app_id"], "filters": {}},
-            )
+    async def test_startup_checks_silver_read_access_and_closes_on_failure(self) -> None:
+        source = StartupUnavailableSilverSource()
+        app = create_app(source_factory=lambda: source)
 
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["detail"], "Silver data source is unavailable.")
+        with self.assertRaises(SilverReadError):
+            async with app.router.lifespan_context(app):
+                self.fail("API startup continued without Silver read access")
+
         self.assertTrue(source.closed)
 
     async def test_query_applies_inclusive_date_range(self) -> None:

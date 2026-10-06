@@ -41,21 +41,38 @@ export function Filters({ config, filters, apps, countries, campaigns, onChange 
       </details>}
       {has("date_range") && <div className="date-filter">
         {config.id === "ua_app_overview" ? <>
-          <label>Period
-            <select value={periodValue(filters.date_range)} onChange={(event) => {
-              const today = shiftDate(initialDateRange().to, 1);
-              if (event.target.value === "custom") return;
-              const end = event.target.value === "today" ? today : shiftDate(today, -1);
-              const days = event.target.value === "today" ? 1 : Number(event.target.value);
-              onChange({ ...filters, date_range: { from: shiftDate(end, -(days - 1)), to: end } });
-            }}>
-              <option value="today">Today</option>
-              <option value="1">Yesterday</option>
-              <option value="3">3 days</option>
-              <option value="7">7 days</option>
-              <option value="custom">Custom dates</option>
-            </select>
-          </label>
+          <div className="period-control">
+            <label>Period
+              <select value={periodValue(filters.date_range)} onChange={(event) => {
+                const today = shiftDate(initialDateRange().to, 1);
+                if (event.target.value === "custom") return;
+                const end = event.target.value === "today" ? today : shiftDate(today, -1);
+                const days = event.target.value === "today" ? 1 : Number(event.target.value);
+                onChange({ ...filters, date_range: { from: shiftDate(end, -(days - 1)), to: end } });
+              }}>
+                <option value="today">Today</option>
+                <option value="1">Yesterday</option>
+                <option value="3">3 days</option>
+                <option value="7">7 days</option>
+                <option value="custom">Custom dates</option>
+              </select>
+            </label>
+            <div className="period-navigation" role="group" aria-label="Navigate period by one day">
+              <button
+                type="button"
+                aria-label="Previous day"
+                title="Previous day"
+                onClick={() => shiftPeriod(-1, filters, onChange)}
+              >‹</button>
+              <button
+                type="button"
+                aria-label="Next day"
+                title="Next day"
+                disabled={filters.date_range.to >= shiftDate(initialDateRange().to, 1)}
+                onClick={() => shiftPeriod(1, filters, onChange)}
+              >›</button>
+            </div>
+          </div>
           <label>From<input type="date" value={filters.date_range.from} max={filters.date_range.to} onChange={(event) => onChange({ ...filters, date_range: { ...filters.date_range, from: event.target.value } })} /></label>
           <label>To<input type="date" value={filters.date_range.to} min={filters.date_range.from} max={shiftDate(initialDateRange().to, 1)} onChange={(event) => onChange({ ...filters, date_range: { ...filters.date_range, to: event.target.value } })} /></label>
         </> : <>
@@ -77,6 +94,18 @@ export function Filters({ config, filters, apps, countries, campaigns, onChange 
       </label>}
     </section>
   );
+}
+
+function shiftPeriod(
+  days: number,
+  filters: DashboardFilters,
+  onChange: (filters: DashboardFilters) => void,
+) {
+  const from = shiftDate(filters.date_range.from, days);
+  const to = shiftDate(filters.date_range.to, days);
+  const today = shiftDate(initialDateRange().to, 1);
+  if (to > today) return;
+  onChange({ ...filters, date_range: { from, to } });
 }
 
 function periodValue(range: { from: string; to: string }): string {

@@ -9,9 +9,9 @@ cd backend && uv sync --all-groups
 uv run api.py
 ```
 
-Ứng dụng mở DuckDB/Ibis connection trong ASGI lifespan và đóng khi shutdown. Mặc định database file nằm ở `backend/.cache/sora-semantic.duckdb`; có thể đổi đường dẫn bằng `SORASEMANTIC_DUCKDB_PATH`. `dim_app` và các dataset đã cache được refresh từ Silver lúc startup. Các bảng materialize được kiểm tra trước mỗi query và refresh khi cache đạt TTL 5 phút; nếu refresh lỗi, API trả `503` thay vì phục vụ snapshot hết hạn. `/api/v1/apps` cũng đọc lại danh mục sau khi refresh cache.
+Ứng dụng mở DuckDB/Ibis connection in-memory trong ASGI lifespan và đóng khi shutdown. Dataset được đăng ký dưới dạng Parquet scan từ Silver; query đọc trực tiếp dữ liệu Silver, không dùng bảng materialize hoặc DuckDB file cache. External-file, Parquet metadata và HTTP metadata caches của DuckDB đều bị tắt trên connection API đang chạy. Sau khi Sora publish Parquet mới, query tiếp theo đọc glob Silver hiện hành mà không cần thêm API refresh. Startup chạy một read check trên `dim_app`; nếu Silver không đọc được, API startup thất bại thay vì phục vụ snapshot cũ. Lỗi startup ghi operation và exception type, không ghi credentials. `SORASEMANTIC_DUCKDB_PATH` không còn được sử dụng.
 
-DuckDB file này là cache cục bộ, không phải source of truth. Chỉ chạy một API process trên cùng cache file. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
+Các file DuckDB cache cũ trong `backend/.cache` không còn được đọc hoặc tự xóa. Query trực tiếp Silver có thể tốn thêm thời gian và lượt đọc S3. Dừng API process cũ trước khi khởi chạy bản mới để tránh tiếp tục dùng process đang phục vụ. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
 
 ## FastMCP
 

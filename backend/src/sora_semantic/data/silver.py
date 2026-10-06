@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
-import time
 from dataclasses import dataclass, field
 from datetime import date
-from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 
 import ibis
 from ibis.backends.duckdb import Backend
 from ibis.expr.types import Table
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SilverReadError(RuntimeError):
@@ -133,7 +135,6 @@ SILVER_DATASETS: tuple[SilverDataset, ...] = (
     SilverDataset("retention", "report/retention", True),
 )
 _DATASETS_BY_NAME = {dataset.name: dataset for dataset in SILVER_DATASETS}
-DEFAULT_CACHE_TTL_SECONDS = 300.0
 
 
 @dataclass(frozen=True)
@@ -157,28 +158,18 @@ class SilverDataSource:
     def __init__(
         self,
         settings: SilverSettings,
-        database_path: Path | None = None,
-        *,
-        cache_ttl_seconds: float = DEFAULT_CACHE_TTL_SECONDS,
     ) -> None:
-        if cache_ttl_seconds <= 0:
-            raise ValueError("cache_ttl_seconds must be positive")
         self._settings = settings
-        self._database_path = database_path
-        self._cache_ttl_seconds = cache_ttl_seconds
         self._backend: Backend | None = None
         self._tables: dict[str, Table] = {}
-        self._cache_refreshed_at: dict[str, float] = {}
 
     @classmethod
     def from_env(
         cls,
         environ: Mapping[str, str] | None = None,
-        *,
-        database_path: Path | None = None,
     ) -> SilverDataSource:
         """Create a source from the Sora Silver environment contract."""
-        return cls(SilverSettings.from_env(environ), database_path=database_path)
+        return cls(SilverSettings.from_env(environ))
 
     def connect(self) -> SilverDataSource:
         """Open DuckDB and install a temporary, bucket-scoped S3 secret."""
@@ -186,12 +177,13 @@ class SilverDataSource:
             return self
 
         backend: Backend | None = None
+        stage = "open_in_memory_duckdb"
         try:
-            if self._database_path is not None:
-                self._database_path.parent.mkdir(parents=True, exist_ok=True)
-                backend = ibis.duckdb.connect(str(self._database_path), extensions=["httpfs"])
-            else:
-                backend = ibis.duckdb.connect(extensions=["httpfs"])
+            backend = ibis.duckdb.connect(extensions=["httpfs"])
+            stage = "disable_external_file_caches"
+            backend.raw_sql("SET enable_external_file_cache = false")
+            backend.raw_sql("SET parquet_metadata_cache = false")
+            backend.raw_sql("SET enable_http_metadata_cache = false")
             endpoint = urlsplit(self._settings.endpoint_url)
             style = {"auto": "vhost", "virtual": "vhost"}.get(
                 self._settings.addressing_style, self._settings.addressing_style
@@ -217,8 +209,14 @@ class SilverDataSource:
                 verify_ssl="true" if self._settings.verify_ssl else "false",
                 scope=_sql_string(f"s3://{self._settings.bucket}/"),
             )
+            stage = "install_s3_secret"
             backend.raw_sql(secret_sql)
-        except Exception:
+        except Exception as error:
+            _LOGGER.error(
+                "Silver connection initialization failed: stage=%s error_type=%s",
+                stage,
+                type(error).__name__,
+            )
             try:
                 if backend is not None:
                     backend.disconnect()
@@ -243,12 +241,8 @@ class SilverDataSource:
         dataset = _DATASETS_BY_NAME.get(name)
         if dataset is None:
             raise KeyError(f"Unknown Silver catalog dataset: {name}")
-        if self._database_path is not None:
-            self.refresh_expired_cached_datasets()
         if name in self._tables:
             return self._tables[name]
-        if self._database_path is not None:
-            return self._refresh_cached_table(name)
         uri = f"s3://{self._settings.bucket}/{dataset.object_pattern()}"
         try:
             table = backend.read_parquet(
@@ -265,67 +259,24 @@ class SilverDataSource:
                 f"(DuckDB {type(error).__name__}); verify Silver read access"
             ) from None
 
-    def refresh_cached_datasets(self) -> None:
-        """Refresh app metadata and datasets already materialized in the DuckDB file."""
-        backend = self._require_backend()
-        if self._database_path is None:
-            return
-        rows = backend.raw_sql(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()
-        cached_names = {
-            row[0][len("_sora_cache_") :]
-            for row in rows
-            if row[0].startswith("_sora_cache_")
-            and row[0][len("_sora_cache_") :] in _DATASETS_BY_NAME
-        }
-        for name in sorted(cached_names | {"dim_app"}):
-            self._refresh_cached_table(name)
-
-    def refresh_expired_cached_datasets(self) -> None:
-        """Refresh materialized Silver tables whose short cache TTL has elapsed."""
-        if self._database_path is None:
-            return
-        backend = self._require_backend()
-        rows = backend.raw_sql(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
-        ).fetchall()
-        now = time.monotonic()
-        cached_names = sorted(
-            row[0][len("_sora_cache_") :]
-            for row in rows
-            if row[0].startswith("_sora_cache_")
-            and row[0][len("_sora_cache_") :] in _DATASETS_BY_NAME
-        )
-        for name in cached_names:
-            refreshed_at = self._cache_refreshed_at.get(name)
-            if refreshed_at is None or now - refreshed_at >= self._cache_ttl_seconds:
-                self._refresh_cached_table(name)
-
-    def _refresh_cached_table(self, name: str) -> Table:
-        backend = self._require_backend()
-        dataset = _DATASETS_BY_NAME.get(name)
-        if dataset is None:
-            raise KeyError(f"Unknown Silver catalog dataset: {name}")
-        uri = f"s3://{self._settings.bucket}/{dataset.object_pattern()}"
-        table_name = f"_sora_cache_{name}"
+    def validate_read_access(self) -> None:
+        """Verify that configured credentials can read the required Silver catalog."""
         try:
-            backend.raw_sql(
-                f"CREATE OR REPLACE TABLE {table_name} AS "
-                f"SELECT * FROM read_parquet({_sql_string(uri)}, "
-                f"hive_partitioning = {'true' if dataset.partitioned_by_date else 'false'}, "
-                "union_by_name = true)"
+            self.table("dim_app").limit(1).execute()
+        except SilverReadError as error:
+            _LOGGER.error(
+                "Silver startup read check failed: dataset=dim_app error_type=%s",
+                type(error).__name__,
             )
-            table = backend.table(table_name)
-            self._tables[name] = table
-            self._cache_refreshed_at[name] = time.monotonic()
-            return table
+            raise
         except Exception as error:
-            self._tables.pop(name, None)
-            self._cache_refreshed_at.pop(name, None)
+            _LOGGER.error(
+                "Silver startup read check failed: dataset=dim_app error_type=%s",
+                type(error).__name__,
+            )
             raise SilverReadError(
-                f"Could not refresh Silver dataset {name!r} "
-                f"(DuckDB {type(error).__name__}); verify Silver read access"
+                "Could not read the required Silver dataset 'dim_app'; "
+                "check S3-compatible access and permissions"
             ) from None
 
     def manifest(self, business_date: date) -> SilverManifest:

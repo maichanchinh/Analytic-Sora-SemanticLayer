@@ -51,6 +51,13 @@ h1 { font-family: Manrope, sans-serif; font-size: clamp(24px,3vw,31px); letter-s
 .country-options button { margin: 6px; border: 0; background: transparent; color: #2867e9; font-size: 12px; cursor: pointer; }
 .date-filter { display: flex; gap: 10px; }
 .date-filter label { min-width: 140px; }
+.period-control { display: flex; align-items: flex-end; gap: 6px; }
+.period-control > label { min-width: 150px; }
+.period-navigation { display: flex; gap: 4px; }
+.period-navigation button { width: 38px; height: 38px; border: 1px solid #e2e7ef; border-radius: 7px; background: #fff; color: #26344c; font-size: 20px; line-height: 1; cursor: pointer; }
+.period-navigation button:hover:not(:disabled) { border-color: #8ab1ff; background: #f7faff; }
+.period-navigation button:focus-visible { outline: 2px solid #3478f6; outline-offset: 2px; }
+.period-navigation button:disabled { color: #aab3c1; background: #f5f7fa; cursor: not-allowed; }
 .application-filter { min-width: 220px !important; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin: 29px 0 15px; }
 .dashboard-section + .dashboard-section .section-heading { margin-top: 34px; }
@@ -112,6 +119,8 @@ td { color: #445168; }
   .filter-panel label, .date-filter, .date-filter label { min-width: 0; flex: 1 1 145px; }
   .filter-panel .application-filter { min-width: 0 !important; }
   .filter-panel select, .filter-panel input { min-width: 0; width: 100%; }
+  .period-control { flex: 1 1 100%; }
+  .period-control > label { flex: 1 1 145px; min-width: 0; }
   .widget-grid { grid-template-columns: minmax(0,1fr); }
   .widget-slot { grid-column: 1; }
   .widget { padding: 15px; }

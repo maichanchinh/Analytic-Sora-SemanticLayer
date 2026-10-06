@@ -259,6 +259,10 @@ class RegistryBackedQueryTests(unittest.TestCase):
                     "business_date": date(2026, 10, 5), "app_id": "app", "country_code": "US",
                     "campaign_id": "c1", "currency_code": "VND", "cost_micros": 663_637_000_000,
                 },
+                {
+                    "business_date": date(2026, 10, 5), "app_id": "ads-only", "country_code": "VN",
+                    "campaign_id": "c2", "currency_code": "VND", "cost_micros": 288_592_365,
+                },
             ],
         )
         self.fx_daily = self.backend.create_table(
@@ -307,10 +311,10 @@ class RegistryBackedQueryTests(unittest.TestCase):
         )
 
         self.assertAlmostEqual(result.rows[0]["admob_revenue_native"], 24.336055)
-        self.assertAlmostEqual(result.rows[0]["google_ads_cost_native"], 663_637)
+        self.assertAlmostEqual(result.rows[0]["google_ads_cost_native"], 663_925.592365)
         self.assertAlmostEqual(result.rows[0]["revenue_usd"], 24.336055)
         self.assertAlmostEqual(result.rows[0]["revenue_vnd"], 1_216_802.75)
-        self.assertAlmostEqual(result.rows[0]["cost_vnd"], 663_637)
+        self.assertAlmostEqual(result.rows[0]["cost_vnd"], 663_925.592365)
         self.assertEqual(
             self.registry.describe("finance_daily")["source_tables"],
             ["admob_mediation_daily", "google_ads_campaign_geo_daily", "fx_daily"],

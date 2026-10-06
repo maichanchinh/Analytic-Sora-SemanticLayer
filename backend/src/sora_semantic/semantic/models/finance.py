@@ -223,11 +223,25 @@ class FinanceDailyDefinition:
             predicates=list(grain),
             how="outer",
         )
+        combined = combined.mutate(
+            business_date=ibis.coalesce(
+                combined.business_date,
+                combined.business_date_right,
+            ),
+            app_id=ibis.coalesce(combined.app_id, combined.app_id_right),
+            country_code=ibis.coalesce(
+                combined.country_code,
+                combined.country_code_right,
+            ),
+        )
         joined = combined.asof_join(
             fx_rates,
             on=combined.business_date >= fx_rates.fx_rate_date,
         )
-        supported_currency = joined.revenue_currency_code.upper().isin(("USD", "VND")) | joined.cost_currency_code.upper().isin(("USD", "VND"))
+        supported_currency = (
+            joined.revenue_currency_code.upper().isin(("USD", "VND"))
+            | joined.cost_currency_code.upper().isin(("USD", "VND"))
+        )
         has_fx = joined.fx_rate.notnull() & (joined.fx_rate > 0)
         return self.definition.build(
             joined.mutate(
