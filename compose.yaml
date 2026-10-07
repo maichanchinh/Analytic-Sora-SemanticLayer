@@ -1,0 +1,75 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["uvicorn", "sora_semantic.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    environment:
+      APP_CONFIG__S3__SILVER__ENDPOINT_URL: ${APP_CONFIG__S3__SILVER__ENDPOINT_URL:-}
+      APP_CONFIG__S3__SILVER__BUCKET: ${APP_CONFIG__S3__SILVER__BUCKET:-}
+      APP_CONFIG__S3__SILVER__REGION_NAME: ${APP_CONFIG__S3__SILVER__REGION_NAME:-}
+      APP_CONFIG__S3__SILVER__ACCESS_KEY_ID: ${APP_CONFIG__S3__SILVER__ACCESS_KEY_ID:-}
+      APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY: ${APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY:-}
+      APP_CONFIG__S3__SILVER__ADDRESSING_STYLE: ${APP_CONFIG__S3__SILVER__ADDRESSING_STYLE:-path}
+      APP_CONFIG__S3__SILVER__VERIFY_SSL: ${APP_CONFIG__S3__SILVER__VERIFY_SSL:-true}
+      DASHBOARD_CORS_ORIGINS: ${DASHBOARD_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/apps', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["mcp.py", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8001"]
+    restart: unless-stopped
+    environment:
+      APP_CONFIG__S3__SILVER__ENDPOINT_URL: ${APP_CONFIG__S3__SILVER__ENDPOINT_URL:-}
+      APP_CONFIG__S3__SILVER__BUCKET: ${APP_CONFIG__S3__SILVER__BUCKET:-}
+      APP_CONFIG__S3__SILVER__REGION_NAME: ${APP_CONFIG__S3__SILVER__REGION_NAME:-}
+      APP_CONFIG__S3__SILVER__ACCESS_KEY_ID: ${APP_CONFIG__S3__SILVER__ACCESS_KEY_ID:-}
+      APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY: ${APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY:-}
+      APP_CONFIG__S3__SILVER__ADDRESSING_STYLE: ${APP_CONFIG__S3__SILVER__ADDRESSING_STYLE:-path}
+      APP_CONFIG__S3__SILVER__VERIFY_SSL: ${APP_CONFIG__S3__SILVER__VERIFY_SSL:-true}
+    ports:
+      - "${MCP_HOST_PORT:-8001}:8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; socket.create_connection(('127.0.0.1', 8001), timeout=3).close()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8000}
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_HOST_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,16 @@
+.git
+.codegraph
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.next
+**/node_modules
+**/dist
+**/build
+**/*.pyc
+backend/tests
+docs
