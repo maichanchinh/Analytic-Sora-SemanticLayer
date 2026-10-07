@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardConfig, QueryRequest } from "@/lib/types";
+import type { DashboardConfig, QueryBatchItem, QueryRequest } from "@/lib/types";
 
 const config: DashboardConfig = {
   id: "overview",
@@ -13,6 +13,13 @@ const config: DashboardConfig = {
     model: "ga4_daily_overview",
     metrics: ["sessions"],
     dimensions: ["business_date"],
+  }, {
+    id: "apps",
+    type: "table",
+    title: "Apps",
+    model: "dim_app",
+    metrics: [],
+    dimensions: ["app_id"],
   }],
 };
 
@@ -27,6 +34,7 @@ describe("DashboardClient filters", () => {
   it("sends the selected app, country and inclusive date range to supported widgets", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://api.test");
     const queries: QueryRequest[] = [];
+    const batches: QueryBatchItem[][] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/v1/dashboards")) {
@@ -42,36 +50,55 @@ describe("DashboardClient filters", () => {
           { model: "ga4_daily_overview", dimensions: [
             { name: "business_date" }, { name: "app_id" }, { name: "country_code" },
           ] },
+          { model: "dim_app", dimensions: [{ name: "app_id" }] },
         ] });
       }
       if (url.endsWith("/api/v1/query")) {
-        const body = JSON.parse(String(init?.body)) as QueryRequest;
+        const body = JSON.parse(String(init?.body)) as QueryRequest | { queries: QueryBatchItem[] };
+        if ("queries" in body) {
+          batches.push(body.queries);
+          return jsonResponse({ results: body.queries.map((query) => query.id === "apps"
+            ? { id: query.id, error: "Apps widget failed" }
+            : { id: query.id, result: {
+              model: query.model,
+              dimensions: [],
+              metrics: [],
+              rows: [{ business_date: query.date_range?.from ?? "2026-10-01", sessions: 2 }],
+            } }) });
+        }
         queries.push(body);
-        const rows = body.model === "dim_country"
-          ? [{ country_code: "US", country_name: "United States" }]
-          : [{ business_date: body.date_range?.from ?? "2026-10-01", sessions: 2 }];
-        return jsonResponse({ model: body.model, dimensions: [], metrics: [], rows });
+        return jsonResponse({
+          model: body.model,
+          dimensions: [],
+          metrics: [],
+          rows: [{ country_code: "US", country_name: "United States" }],
+        });
       }
       return jsonResponse({ detail: "Not found" }, 404);
     }));
 
     const { DashboardClient } = await import("@/components/DashboardClient");
     render(<DashboardClient />);
-    await screen.findByRole("region", { name: "Engagement" });
-    await waitFor(() => expect(queries.some((query) => query.model === "ga4_daily_overview")).toBe(true));
+    await screen.findByRole("heading", { name: /Engagement/ });
+    await screen.findByText("Apps widget failed");
+    await waitFor(() => expect(batches.some((batch) => batch.length === 2)).toBe(true));
 
     fireEvent.change(screen.getByRole("combobox", { name: "Application" }), { target: { value: "app-one" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Country" }), { target: { value: "US" } });
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-10-01" } });
-    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-10-03" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /United States \(US\)/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose date range" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Select month" }), { target: { value: "7" } });
+    fireEvent.click(screen.getByRole("gridcell", { name: "Aug 1, 2026" }));
+    fireEvent.click(screen.getByRole("gridcell", { name: "Aug 3, 2026" }));
 
     await waitFor(() => {
-      const request = [...queries].reverse().find((query) => query.model === "ga4_daily_overview");
+      const request = [...batches].reverse().flat().find((query) => query.model === "ga4_daily_overview");
       expect(request).toMatchObject({
-        filters: { app_id: "app-one", country_code: "US" },
-        date_range: { from: "2026-10-01", to: "2026-10-03" },
+        filters: { app_id: "app-one", country_code: ["US"] },
+        date_range: { from: "2026-08-01", to: "2026-08-03" },
       });
     });
+    expect(queries.some((query) => query.model !== "dim_country")).toBe(false);
+    expect(batches.at(-1)).toHaveLength(2);
   });
 });
 

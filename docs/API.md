@@ -9,7 +9,9 @@ cd backend && uv sync --all-groups
 uv run api.py
 ```
 
-Ứng dụng mở DuckDB/Ibis connection in-memory trong ASGI lifespan và đóng khi shutdown. Dataset được đăng ký dưới dạng Parquet scan từ Silver; query đọc trực tiếp dữ liệu Silver, không dùng bảng materialize hoặc DuckDB file cache. External-file, Parquet metadata và HTTP metadata caches của DuckDB đều bị tắt trên connection API đang chạy. Sau khi Sora publish Parquet mới, query tiếp theo đọc glob Silver hiện hành mà không cần thêm API refresh. Startup chạy một read check trên `dim_app`; nếu Silver không đọc được, API startup thất bại thay vì phục vụ snapshot cũ. Lỗi startup ghi operation và exception type, không ghi credentials. `SORASEMANTIC_DUCKDB_PATH` không còn được sử dụng.
+Mặc định launcher dùng log level `INFO`. Để debug khi kiểm tra app, query hoặc lỗi kết nối Silver, chạy `uv run api.py --debug`; chế độ này bật log level `DEBUG` cho ứng dụng và Uvicorn, gồm access log và thời gian/model/date range của query thành công.
+
+Ứng dụng mở DuckDB/Ibis connection in-memory trong ASGI lifespan và đóng khi shutdown. Dataset được đăng ký dưới dạng Parquet scan từ Silver; query đọc trực tiếp dữ liệu Silver, không dùng bảng materialize hoặc DuckDB file cache. External-file, Parquet metadata và HTTP metadata caches của DuckDB đều bị tắt trên connection API đang chạy. Sau khi Sora publish Parquet mới, query tiếp theo đọc glob Silver hiện hành mà không cần thêm API refresh. Startup chạy một read check trên `dim_app`; nếu Silver không đọc được, API startup thất bại thay vì phục vụ snapshot cũ. Log chẩn đoán đã làm sạch thông tin nhạy cảm; `X-Request-ID` giúp đối chiếu log giữa request và query. `SORASEMANTIC_DUCKDB_PATH` không còn được sử dụng.
 
 Các file DuckDB cache cũ trong `backend/.cache` không còn được đọc hoặc tự xóa. Query trực tiếp Silver có thể tốn thêm thời gian và lượt đọc S3. Dừng API process cũ trước khi khởi chạy bản mới để tránh tiếp tục dùng process đang phục vụ. Host mặc định trong lệnh trên chỉ bind loopback. API hiện chưa có authentication; chỉ expose qua mạng nội bộ được kiểm soát.
 
@@ -84,6 +86,19 @@ Dimensions route dùng cùng shape `models`, với key `dimensions` thay cho `me
 Request schema hiển thị trong Swagger UI tại `/docs`. Dropdown Example Value có ba request mẫu lấy từ Silver thật: `app_daily`, `campaign_geo` và `ga4_retention_cohort`. Snapshot mẫu được đọc ngày `2026-10-05`; khi dùng Swagger, chọn **Try it out** rồi **Execute** để chạy request và xem rows trả về. Chỉ chọn example sẽ điền payload, không tự gửi request.
 
 Body gồm `model`, `metrics`, `dimensions`, `filters`, `date_range` và tùy chọn `compare_previous_period` (mặc định `false`). Khi bật, `comparisons` ghép theo dimensions và trả mỗi metric các giá trị `previous`, `delta`, `percent_change`; kỳ trước có cùng số ngày và liền trước kỳ hiện tại. Nếu thiếu metric hoặc kỳ trước bằng 0, `percent_change` là `null`.
+
+Dashboard có thể gửi nhiều truy vấn widget trong một POST tới cùng route để giảm số request. Mỗi phần tử dùng schema query đơn và thêm `id`; response giữ kết quả hoặc lỗi riêng theo `id`, nên một widget lỗi không làm mất kết quả widget khác.
+
+```json
+{
+  "queries": [
+    {"id": "revenue", "model": "finance_daily", "metrics": ["revenue_usd"], "dimensions": [], "filters": {}},
+    {"id": "trend", "model": "app_daily", "metrics": ["admob_revenue_native"], "dimensions": ["business_date"], "filters": {}, "date_range": {"from": "2026-10-05", "to": "2026-10-05"}}
+  ]
+}
+```
+
+Response batch có dạng `{"results":[{"id":"revenue","result":{...}},{"id":"trend","error":"..."}]}`. Lỗi đọc Silver được chuẩn hóa thành thông báo an toàn; API thử reconnect DuckDB/S3 tối đa ba lần, chờ 0,5 giây rồi 1 giây giữa các lần. Batch có dữ liệu một phần trả `200`; nếu không có widget nào đọc được do Silver unavailable, API trả `503`.
 
 ```json
 {

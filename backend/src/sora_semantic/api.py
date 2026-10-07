@@ -5,14 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import timedelta
+import logging
 import os
 from pathlib import Path
+import re
 from threading import RLock
+import time
 from typing import Any
+from uuid import uuid4
 
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from sora_semantic.data.silver import SilverDataSource, SilverReadError
 from sora_semantic.dashboard_configs import (
@@ -25,8 +29,14 @@ from sora_semantic.semantic.query import (
     QueryRequest,
     QueryResult,
     QueryService,
+    QUERY_DIAGNOSTIC_ID,
+    safe_error_summary,
 )
 from sora_semantic.semantic.registry import SemanticRegistry
+
+_LOGGER = logging.getLogger(__name__)
+_MAX_SILVER_RECONNECT_ATTEMPTS = 3
+_SILVER_RECONNECT_BACKOFF_SECONDS = (0.5, 1.0)
 
 
 class DateRangeBody(BaseModel):
@@ -61,8 +71,34 @@ class QueryRequestBody(BaseModel):
 
     def to_query_request(self) -> QueryRequest:
         return QueryRequest.from_mapping(
-            self.model_dump(mode="python", by_alias=True, exclude={"compare_previous_period"})
+            self.model_dump(
+                mode="python",
+                by_alias=True,
+                exclude={"compare_previous_period", "id"},
+            )
         )
+
+
+class QueryBatchItemBody(QueryRequestBody):
+    """One independently evaluated query in a dashboard batch."""
+
+    id: str = Field(min_length=1, description="Client correlation ID, usually the widget ID.")
+
+
+class QueryBatchBody(BaseModel):
+    """Multiple semantic queries submitted through the existing query endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    queries: list[QueryBatchItemBody] = Field(min_length=1)
+
+    @field_validator("queries")
+    @classmethod
+    def unique_query_ids(cls, queries: list[QueryBatchItemBody]):
+        ids = [query.id for query in queries]
+        if len(ids) != len(set(ids)):
+            raise ValueError("queries must have unique ids.")
+        return queries
 
 
 def _default_source_factory() -> SilverDataSource:
@@ -106,7 +142,8 @@ def create_app(
         CORSMiddleware,
         allow_origins=[origin.strip() for origin in cors_origins.split(",") if origin.strip()],
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
     )
     app.state.dashboard_config_store = DashboardConfigStore(dashboard_config_dir)
 
@@ -156,7 +193,8 @@ def create_app(
     @app.post("/api/v1/query")
     def run_query(
         request: Request,
-        payload: QueryRequestBody = Body(
+        response: Response,
+        payload: QueryRequestBody | QueryBatchBody = Body(
             openapi_examples={
                 "app_daily_live_sample": {
                     "summary": "App daily: live Charge Speed sample",
@@ -202,40 +240,32 @@ def create_app(
             }
         ),
     ) -> dict[str, Any]:
+        supplied_request_id = request.headers.get("X-Request-ID", "")
+        request_id = supplied_request_id if re.fullmatch(r"[A-Za-z0-9._-]{1,128}", supplied_request_id) else uuid4().hex
+        response.headers["X-Request-ID"] = request_id
+        diagnostic_token = QUERY_DIAGNOSTIC_ID.set(request_id)
+        if isinstance(payload, QueryBatchBody):
+            try:
+                return _run_query_batch(request.app, payload)
+            finally:
+                QUERY_DIAGNOSTIC_ID.reset(diagnostic_token)
+
         try:
             query = payload.to_query_request()
         except QueryContractError as error:
+            QUERY_DIAGNOSTIC_ID.reset(diagnostic_token)
             raise HTTPException(status_code=422, detail=str(error)) from None
-
-        result = _execute_app_query(request.app, query)
-        response: dict[str, Any] = {
-            "model": result.model,
-            "dimensions": result.dimensions,
-            "metrics": result.metrics,
-            "rows": result.rows,
-        }
-        if payload.compare_previous_period:
-            if query.date_range is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail="compare_previous_period requires date_range.",
-                )
-            start = QueryService._parse_date(query.date_range.from_, "date_range.from")
-            end = QueryService._parse_date(query.date_range.to, "date_range.to")
-            period_days = (end - start).days + 1
-            previous_request = QueryRequest(
-                model=query.model,
-                metrics=query.metrics,
-                dimensions=query.dimensions,
-                filters=query.filters,
-                date_range=type(query.date_range)(
-                    from_=start - timedelta(days=period_days),
-                    to=start - timedelta(days=1),
-                ),
-            )
-            previous = _execute_app_query(request.app, previous_request)
-            response["comparisons"] = _build_comparisons(result, previous)
-        return response
+        try:
+            return _run_one_query(request.app, query, payload.compare_previous_period)
+        except SilverReadError:
+            raise HTTPException(
+                status_code=503,
+                detail="Silver data source is unavailable.",
+            ) from None
+        except QueryContractError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
+        finally:
+            QUERY_DIAGNOSTIC_ID.reset(diagnostic_token)
 
     @app.get("/api/v1/dashboards")
     def list_dashboards(request: Request) -> dict[str, list[dict[str, str]]]:
@@ -263,10 +293,156 @@ def create_app(
     return app
 
 
-def _execute_app_query(app: FastAPI, query: QueryRequest) -> QueryResult:
-    # QueryService lazily caches direct Silver table expressions; serialize registry access.
+def _run_one_query(
+    app: FastAPI,
+    query: QueryRequest,
+    compare_previous_period: bool,
+    reconnect_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if reconnect_state is None:
+        reconnect_state = {"recovery_used": False, "terminal": False}
+    if compare_previous_period and query.date_range is None:
+        raise HTTPException(
+            status_code=422,
+            detail="compare_previous_period requires date_range.",
+        )
+
+    result = _execute_app_query(app, query, reconnect_state)
+    response: dict[str, Any] = {
+        "model": result.model,
+        "dimensions": result.dimensions,
+        "metrics": result.metrics,
+        "rows": result.rows,
+    }
+    if compare_previous_period:
+        start = QueryService._parse_date(query.date_range.from_, "date_range.from")
+        end = QueryService._parse_date(query.date_range.to, "date_range.to")
+        period_days = (end - start).days + 1
+        previous_request = QueryRequest(
+            model=query.model,
+            metrics=query.metrics,
+            dimensions=query.dimensions,
+            filters=query.filters,
+            date_range=type(query.date_range)(
+                from_=start - timedelta(days=period_days),
+                to=start - timedelta(days=1),
+            ),
+        )
+        previous = _execute_app_query(app, previous_request, reconnect_state)
+        response["comparisons"] = _build_comparisons(result, previous)
+    return response
+
+
+def _run_query_batch(app: FastAPI, payload: QueryBatchBody) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    reconnect_state: dict[str, Any] = {"recovery_used": False, "terminal": False}
+    silver_unavailable = False
+    # Keep the batch serialized and allow one bounded recovery cycle for the whole batch.
     with app.state.query_lock:
-        return _execute_query(app.state.query_service, query)
+        for item in payload.queries:
+            if reconnect_state["terminal"]:
+                silver_unavailable = True
+                results.append({"id": item.id, "error": "Silver data source is unavailable."})
+                continue
+            item_started_at = time.perf_counter()
+            try:
+                query = item.to_query_request()
+                result = _run_one_query(
+                    app,
+                    query,
+                    item.compare_previous_period,
+                    reconnect_state,
+                )
+                results.append({"id": item.id, "result": result})
+            except HTTPException as error:
+                detail = error.detail if isinstance(error.detail, str) else "Query failed."
+                results.append({"id": item.id, "error": detail})
+            except QueryContractError as error:
+                results.append({"id": item.id, "error": str(error)})
+            except SilverReadError:
+                silver_unavailable = True
+                reconnect_state["terminal"] = True
+                results.append({"id": item.id, "error": "Silver data source is unavailable."})
+            finally:
+                _LOGGER.info(
+                    "Silver batch query completed: request_id=%s widget_id=%s model=%s date_from=%s date_to=%s duration_ms=%.1f outcome=%s",
+                    QUERY_DIAGNOSTIC_ID.get(), item.id, item.model,
+                    item.date_range.from_ if item.date_range else None,
+                    item.date_range.to if item.date_range else None,
+                    (time.perf_counter() - item_started_at) * 1000,
+                    "error" if results and "error" in results[-1] else "success",
+                )
+    if silver_unavailable and not any("result" in item for item in results):
+        raise HTTPException(
+            status_code=503,
+            detail="Silver data source is unavailable.",
+        )
+    return {"results": results}
+
+
+def _execute_app_query(
+    app: FastAPI,
+    query: QueryRequest,
+    reconnect_state: dict[str, Any] | None = None,
+) -> QueryResult:
+    # QueryService lazily caches direct Silver table expressions; serialize registry access.
+    state = reconnect_state if reconnect_state is not None else {
+        "recovery_used": False,
+        "terminal": False,
+    }
+    with app.state.query_lock:
+        try:
+            return _execute_query(app.state.query_service, query)
+        except SilverReadError:
+            if state["terminal"] or state["recovery_used"]:
+                state["terminal"] = True
+                raise
+            state["recovery_used"] = True
+            try:
+                _reconnect_silver(app)
+                result = _execute_query(app.state.query_service, query)
+            except SilverReadError:
+                state["terminal"] = True
+                raise
+            return result
+
+
+def _reconnect_silver(app: FastAPI) -> None:
+    """Retry rebuilding the DuckDB session, validating read access before reuse."""
+    last_error: SilverReadError | None = None
+    for attempt in range(_MAX_SILVER_RECONNECT_ATTEMPTS):
+        if attempt:
+            time.sleep(_SILVER_RECONNECT_BACKOFF_SECONDS[attempt - 1])
+        try:
+            _reconnect_silver_once(app)
+            return
+        except SilverReadError as error:
+            last_error = error
+            _LOGGER.warning(
+                "Silver reconnect attempt failed: request_id=%s attempt=%s/%s error_type=%s cause=%s",
+                QUERY_DIAGNOSTIC_ID.get(), attempt + 1, _MAX_SILVER_RECONNECT_ATTEMPTS,
+                type(error).__name__, safe_error_summary(error),
+            )
+    raise last_error or SilverReadError("Silver data source is unavailable.")
+
+
+def _reconnect_silver_once(app: FastAPI) -> None:
+    """Rebuild the in-memory DuckDB session and all expressions after a read failure."""
+    source = app.state.silver_source
+    try:
+        source.close()
+        source.connect()
+        validate_read_access = getattr(source, "validate_read_access", None)
+        if validate_read_access is not None:
+            validate_read_access()
+    except Exception as error:
+        _LOGGER.error(
+            "Silver reconnect failed: request_id=%s error_type=%s cause=%s",
+            QUERY_DIAGNOSTIC_ID.get(), type(error).__name__, safe_error_summary(error),
+        )
+        raise SilverReadError("Silver data source is unavailable.") from None
+    app.state.semantic_registry = SemanticRegistry(source)
+    app.state.query_service = QueryService(app.state.semantic_registry)
 
 
 def _execute_query(service: QueryService, query: QueryRequest) -> QueryResult:
@@ -275,10 +451,7 @@ def _execute_query(service: QueryService, query: QueryRequest) -> QueryResult:
     except QueryContractError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     except SilverReadError:
-        raise HTTPException(
-            status_code=503,
-            detail="Silver data source is unavailable.",
-        ) from None
+        raise
 
 
 def _build_comparisons(current: QueryResult, previous: QueryResult) -> list[dict[str, Any]]:

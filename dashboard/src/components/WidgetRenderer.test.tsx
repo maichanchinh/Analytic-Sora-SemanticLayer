@@ -34,6 +34,19 @@ describe("WidgetRenderer", () => {
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
 
+  it("uses distinct metric colors and icons for cost, revenue, profit and ROAS", () => {
+    const metrics = ["cost_usd", "revenue_usd", "profit_usd", "roas_usd"].map((name) => ({ name, unit: "USD" }));
+    const { container } = render(<WidgetRenderer
+      widget={{ ...baseWidget, metrics: metrics.map((metric) => metric.name) }}
+      state={{ status: "success", result: { model: "finance_daily", dimensions: [], metrics, rows: [{ cost_usd: 2, revenue_usd: 4, profit_usd: 2, roas_usd: 2 }] } }}
+    />);
+    expect(container.querySelectorAll(".metric-item.tone-cost svg")).toHaveLength(1);
+    expect(container.querySelectorAll(".metric-item.tone-revenue svg")).toHaveLength(1);
+    expect(container.querySelectorAll(".metric-item.tone-profit svg")).toHaveLength(1);
+    expect(container.querySelectorAll(".metric-item.tone-roas svg")).toHaveLength(1);
+    expect(container.querySelectorAll(".widget-icon svg")).toHaveLength(1);
+  });
+
   it("renders empty results and unsupported widget types clearly", () => {
     render(<WidgetRenderer widget={baseWidget} state={{ status: "success", result: { ...result, rows: [] } }} />);
     expect(screen.getByText("No data for the selected filters.")).toBeInTheDocument();

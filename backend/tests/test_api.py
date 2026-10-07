@@ -5,12 +5,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import ibis
 from httpx import ASGITransport, AsyncClient
 
-from sora_semantic.api import create_app
+from sora_semantic.api import _execute_query, create_app
 from sora_semantic.data.silver import SilverReadError
 from sora_semantic.semantic.registry import SemanticRegistry
 from test_support import ignore_known_ibis_duckdb_deprecation
@@ -55,10 +55,16 @@ class InMemorySilverSource:
         self.backend = ibis.duckdb.connect()
         self.connected = False
         self.closed = False
+        self.connect_count = 0
         self._tables = {}
 
     def connect(self):
+        if self.closed:
+            self.backend = ibis.duckdb.connect()
+            self._tables = {}
         self.connected = True
+        self.closed = False
+        self.connect_count += 1
         return self
 
     def table(self, name: str):
@@ -168,6 +174,133 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["metrics"], [])
         self.assertEqual(body["rows"], [{"app_id": "app.a", "display_name": "Alpha"}])
         self.assertEqual([item["name"] for item in body["dimensions"]], ["app_id", "display_name"])
+
+    async def test_query_batch_returns_results_and_errors_by_id(self) -> None:
+        source = InMemorySilverSource()
+        async with api_client(create_app(source_factory=lambda: source)) as client:
+            response = await client.post(
+                "/api/v1/query",
+                json={
+                    "queries": [
+                        {
+                            "id": "apps",
+                            "model": "dim_app",
+                            "dimensions": ["app_id"],
+                        },
+                        {
+                            "id": "bad-widget",
+                            "model": "missing_model",
+                            "metrics": ["revenue_usd"],
+                        },
+                    ]
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        results = {item["id"]: item for item in response.json()["results"]}
+        self.assertEqual(len(results["apps"]["result"]["rows"]), 2)
+        self.assertEqual(
+            results["bad-widget"]["error"],
+            "Unsupported semantic model: 'missing_model'.",
+        )
+
+    async def test_query_reconnects_and_retries_once_after_silver_read_error(self) -> None:
+        source = InMemorySilverSource()
+        original_execute = _execute_query
+        failed_once = False
+
+        def fail_once(service, query):
+            nonlocal failed_once
+            if not failed_once:
+                failed_once = True
+                raise SilverReadError("temporary network read failure")
+            return original_execute(service, query)
+
+        with patch("sora_semantic.api._execute_query", side_effect=fail_once):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.post(
+                    "/api/v1/query",
+                    json={"model": "dim_app", "dimensions": ["app_id"]},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(source.connect_count, 2)
+
+    async def test_query_returns_503_after_reconnect_and_retry_fail(self) -> None:
+        source = InMemorySilverSource()
+        with patch("sora_semantic.api._execute_query", side_effect=SilverReadError("offline")):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.post(
+                    "/api/v1/query",
+                    json={"model": "dim_app", "dimensions": ["app_id"]},
+                )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "Silver data source is unavailable.")
+        self.assertEqual(source.connect_count, 2)
+
+    async def test_query_batch_returns_503_when_silver_fails_for_all_widgets(self) -> None:
+        source = InMemorySilverSource()
+        with patch("sora_semantic.api._execute_query", side_effect=SilverReadError("offline")):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.post(
+                    "/api/v1/query",
+                    json={
+                        "queries": [
+                            {"id": "first", "model": "dim_app", "dimensions": ["app_id"]},
+                            {"id": "second", "model": "dim_app", "dimensions": ["display_name"]},
+                        ]
+                    },
+                )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "Silver data source is unavailable.")
+        self.assertEqual(source.connect_count, 2)
+
+    async def test_query_batch_keeps_partial_results_when_silver_fails(self) -> None:
+        source = InMemorySilverSource()
+        original_execute = _execute_query
+        calls = 0
+
+        def fail_second_query(service, query):
+            nonlocal calls
+            calls += 1
+            if calls >= 2:
+                raise SilverReadError("offline")
+            return original_execute(service, query)
+
+        with patch("sora_semantic.api._execute_query", side_effect=fail_second_query):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.post(
+                    "/api/v1/query",
+                    json={
+                        "queries": [
+                            {"id": "first", "model": "dim_app", "dimensions": ["app_id"]},
+                            {"id": "second", "model": "dim_app", "dimensions": ["display_name"]},
+                        ]
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        results = {item["id"]: item for item in response.json()["results"]}
+        self.assertIn("result", results["first"])
+        self.assertEqual(results["second"]["error"], "Silver data source is unavailable.")
+
+    async def test_reconnect_retries_three_times_with_short_backoff(self) -> None:
+        source = InMemorySilverSource()
+        with (
+            patch("sora_semantic.api._execute_query", side_effect=SilverReadError("offline")),
+            patch("sora_semantic.api._reconnect_silver_once", side_effect=SilverReadError("offline")),
+            patch("sora_semantic.api.time.sleep") as sleep,
+        ):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.post(
+                    "/api/v1/query",
+                    json={"model": "dim_app", "dimensions": ["app_id"]},
+                )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(sleep.call_args_list, [call(0.5), call(1.0)])
 
     async def test_startup_checks_silver_read_access_and_closes_on_failure(self) -> None:
         source = StartupUnavailableSilverSource()

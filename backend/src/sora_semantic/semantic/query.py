@@ -3,13 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextvars import ContextVar
 from datetime import date, datetime
 from decimal import Decimal
+import logging
 import math
+import re
+import time
 from typing import Any, Mapping
 
+from sora_semantic.data.silver import SilverReadError
 from sora_semantic.semantic.dimensions import DimensionDefinition
 from sora_semantic.semantic.registry import SemanticRegistry
+
+_LOGGER = logging.getLogger(__name__)
+QUERY_DIAGNOSTIC_ID: ContextVar[str] = ContextVar("query_diagnostic_id", default="-")
+
+
+def safe_error_summary(error: Exception) -> str:
+    summary = str(error)
+    summary = re.sub(r"(?i)(access.?key|secret|token|password)(\s*[=:]\s*)[^\s&]+", r"\1\2<redacted>", summary)
+    summary = re.sub(r"(https?://)[^/@\s]+:[^/@\s]+@", r"\1<redacted>@", summary)
+    summary = re.sub(r"([?&](?:X-Amz-[^=]+|signature|credential)=)[^&\s]+", r"\1<redacted>", summary, flags=re.IGNORECASE)
+    return summary[:500]
 
 
 class QueryContractError(ValueError):
@@ -126,6 +142,7 @@ class QueryService:
                 lambda table, column=source_column, upper=end: table[column] <= upper
             )
 
+        started_at = time.perf_counter()
         try:
             result = self._registry.get(request.model).query(
                 dimensions=list(request.dimensions),
@@ -135,9 +152,33 @@ class QueryService:
         except (KeyError, ValueError) as error:
             raise QueryContractError(f"Invalid query contract: {error}") from None
 
-        rows = tuple(
-            {name: self._output_value(value) for name, value in row.items()}
-            for row in result.to_pyarrow().to_pylist()
+        try:
+            rows = tuple(
+                {name: self._output_value(value) for name, value in row.items()}
+                for row in result.to_pyarrow().to_pylist()
+            )
+        except Exception as error:
+            _LOGGER.error(
+                "Silver query execution failed: request_id=%s model=%s date_from=%s date_to=%s duration_ms=%.1f error_type=%s cause=%s",
+                QUERY_DIAGNOSTIC_ID.get(),
+                request.model,
+                request.date_range.from_ if request.date_range else None,
+                request.date_range.to if request.date_range else None,
+                (time.perf_counter() - started_at) * 1000,
+                type(error).__name__,
+                safe_error_summary(error),
+            )
+            raise SilverReadError(
+                f"Could not execute query against Silver (DuckDB {type(error).__name__})."
+            ) from None
+        _LOGGER.debug(
+            "Silver query completed: request_id=%s model=%s date_from=%s date_to=%s duration_ms=%.1f row_count=%s",
+            QUERY_DIAGNOSTIC_ID.get(),
+            request.model,
+            request.date_range.from_ if request.date_range else None,
+            request.date_range.to if request.date_range else None,
+            (time.perf_counter() - started_at) * 1000,
+            len(rows),
         )
         metadata = definition.metadata()
         dimension_metadata = {item["name"]: item for item in metadata["dimensions"]}

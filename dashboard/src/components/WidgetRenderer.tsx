@@ -4,6 +4,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ReactNode } from "react";
+import { Icon, type IconName } from "@/components/Icon";
 import type { AppOption, DashboardWidget, QueryResult } from "@/lib/types";
 import { fieldUnit, formatAxisValue, formatDate, formatMetricValue } from "@/lib/format";
 
@@ -28,7 +29,8 @@ export function WidgetRenderer({ widget, state, apps = [] }: Props) {
 }
 
 function WidgetHeader({ widget }: { widget: DashboardWidget }) {
-  return <div className="widget-heading"><h2 id={`${widget.id}-title`}>{widget.title}</h2><span>{widget.model.replaceAll("_", " ")}</span></div>;
+  const leadingMetric = widget.metrics[0] ?? "activity";
+  return <div className="widget-heading"><div className="widget-title"><span className={`widget-icon tone-${metricTone(leadingMetric)}`}><Icon name={metricIcon(leadingMetric)} /></span><h2 id={`${widget.id}-title`}>{widget.title}</h2></div><span>{widget.model.replaceAll("_", " ")}</span></div>;
 }
 
 type Renderer = (widget: DashboardWidget, result: QueryResult, apps: AppOption[]) => ReactNode;
@@ -44,13 +46,26 @@ function metricWidget(_widget: DashboardWidget, result: QueryResult) {
   const row = result.rows[0] ?? {};
   const comparison = result.comparisons?.[0]?.metrics ?? {};
   return <div className="metric-grid">{result.metrics.map((metric) => (
-    <article className="metric-item" key={metric.name}>
-      <span>{metric.name.replaceAll("_", " ")}</span>
+    <article className={`metric-item tone-${metricTone(metric.name)}`} key={metric.name}>
+      <span className="metric-label"><Icon name={metricIcon(metric.name)} />{metric.name.replaceAll("_", " ")}</span>
       <strong>{formatMetricValue(row[metric.name], metric, row)}</strong>
       {metric.name in comparison && <ChangeIndicator comparison={comparison[metric.name]} metric={metric.name} field={metric} row={row} />}
       <small title={metric.null_behavior ?? metric.description ?? undefined}>{fieldUnit(metric)}{row[metric.name] == null && metric.null_behavior ? " · why unavailable" : ""}</small>
     </article>
   ))}</div>;
+}
+
+function metricTone(name: string): "cost" | "revenue" | "profit" | "roas" | "neutral" {
+  if (/cost|spend/i.test(name)) return "cost";
+  if (/revenue|earning/i.test(name)) return "revenue";
+  if (/profit/i.test(name)) return "profit";
+  if (/roas/i.test(name)) return "roas";
+  return "neutral";
+}
+
+function metricIcon(name: string): IconName {
+  const tone = metricTone(name);
+  return tone === "neutral" ? "activity" : tone;
 }
 
 function areaChartWidget(_widget: DashboardWidget, result: QueryResult) {
@@ -59,17 +74,17 @@ function areaChartWidget(_widget: DashboardWidget, result: QueryResult) {
   return <div className="chart" role="img" aria-label="Area chart">
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={[...result.rows].sort((left, right) => String(left[dateField]).localeCompare(String(right[dateField])))} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e7ebf2" />
-        <XAxis dataKey={dateField} tickFormatter={(value) => formatDate(value)} minTickGap={30} />
-        <YAxis yAxisId="primary" width={72} tickFormatter={(value) => formatAxisValue(value, result.metrics[0])} />
-        {result.metrics.some((metric) => metric.name.startsWith("cost_")) && <YAxis yAxisId="secondary" orientation="right" width={72} tickFormatter={(value) => formatAxisValue(value, result.metrics.find((metric) => metric.name.startsWith("cost_"))!)} />}
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+        <XAxis dataKey={dateField} tick={{ fill: "var(--muted)" }} tickFormatter={(value) => formatDate(value)} minTickGap={30} />
+        <YAxis yAxisId="primary" width={72} tick={{ fill: "var(--muted)" }} tickFormatter={(value) => formatAxisValue(value, result.metrics[0])} />
+        {result.metrics.some((metric) => metric.name.startsWith("cost_")) && <YAxis yAxisId="secondary" orientation="right" width={72} tick={{ fill: "var(--muted)" }} tickFormatter={(value) => formatAxisValue(value, result.metrics.find((metric) => metric.name.startsWith("cost_"))!)} />}
         <Legend />
-        <Tooltip labelFormatter={(value) => formatDate(value)} formatter={(value, name, item) => {
+        <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--line)", color: "var(--ink)" }} labelStyle={{ color: "var(--ink)" }} labelFormatter={(value) => formatDate(value)} formatter={(value, name, item) => {
           const metric = result.metrics.find((field) => field.name === String(name) || field.name.replaceAll("_", " ") === String(name));
           return [metric ? formatMetricValue(value, metric, (item?.payload ?? {}) as Record<string, unknown>) : String(value ?? "Unavailable"), String(name)];
         }} />
         {result.metrics.map((metric, index) => {
-          const color = ["#3478f6", "#f59e0b", "#10a778"][index % 3];
+          const color = metricColor(metric.name, index);
           const yAxisId = metric.name.startsWith("cost_") ? "secondary" : "primary";
           return <Area key={metric.name} yAxisId={yAxisId} type="monotone" dataKey={metric.name} name={metric.name.replaceAll("_", " ")} stroke={color} fill={color} fillOpacity={0.14} connectNulls={false} />;
         })}
@@ -85,15 +100,24 @@ function barChartWidget(_widget: DashboardWidget, result: QueryResult) {
   return <div className="chart" role="img" aria-label="Bar chart">
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={result.rows} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e7ebf2" />
-        <XAxis dataKey={category} /><YAxis /><Tooltip formatter={(value, name, item) => {
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+        <XAxis dataKey={category} tick={{ fill: "var(--muted)" }} /><YAxis tick={{ fill: "var(--muted)" }} /><Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--line)", color: "var(--ink)" }} labelStyle={{ color: "var(--ink)" }} formatter={(value, name, item) => {
           const metricField = result.metrics.find((field) => field.name === String(name) || field.name.replaceAll("_", " ") === String(name));
           return [metricField ? formatMetricValue(value, metricField, (item?.payload ?? {}) as Record<string, unknown>) : String(value ?? "Unavailable"), String(name)];
         }} />
-        <Bar dataKey={metric.name} name={metric.name.replaceAll("_", " ")} fill="#3478f6" radius={[6, 6, 0, 0]} />
+        <Bar dataKey={metric.name} name={metric.name.replaceAll("_", " ")} fill={metricColor(metric.name, 0)} radius={[6, 6, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   </div>;
+}
+
+function metricColor(name: string, fallbackIndex: number): string {
+  const tone = metricTone(name);
+  if (tone === "cost") return "var(--metric-cost)";
+  if (tone === "revenue") return "var(--metric-revenue)";
+  if (tone === "profit") return "var(--metric-profit)";
+  if (tone === "roas") return "var(--metric-roas)";
+  return ["var(--metric-profit)", "var(--metric-cost)", "var(--metric-revenue)"][fallbackIndex % 3];
 }
 
 function tableWidget(_widget: DashboardWidget, result: QueryResult, apps: AppOption[]) {

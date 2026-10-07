@@ -70,3 +70,28 @@ describe("Period day navigation", () => {
     expect(screen.getByRole("button", { name: "Next day" })).toBeDisabled();
   });
 });
+
+describe("date range picker", () => {
+  afterEach(cleanup);
+
+  it("commits a single day after one selection", () => {
+    const onChange = vi.fn();
+    render(<Filters config={config} filters={dashboardFilters({ from: "2026-10-05", to: "2026-10-05" })} apps={[]} countries={[]} campaigns={[]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose date range" }));
+    fireEvent.click(screen.getByRole("button", { name: "Single day" }));
+    fireEvent.click(screen.getByRole("gridcell", { name: "Oct 3, 2026" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ date_range: { from: "2026-10-03", to: "2026-10-03" } }));
+  });
+
+  it("waits for the second range date and does not query while browsing months", () => {
+    const onChange = vi.fn();
+    render(<Filters config={config} filters={dashboardFilters({ from: "2026-10-05", to: "2026-10-05" })} apps={[]} countries={[]} campaigns={[]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose date range" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Select month" }), { target: { value: "7" } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("gridcell", { name: "Aug 1, 2026" }));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("gridcell", { name: "Aug 5, 2026" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ date_range: { from: "2026-08-01", to: "2026-08-05" } }));
+  });
+});

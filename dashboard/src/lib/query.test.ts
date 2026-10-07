@@ -41,7 +41,7 @@ describe("queryForWidget", () => {
 });
 
 describe("initialDateRange", () => {
-  it("defaults to a 30-day inclusive range", () => {
-    expect(initialDateRange(new Date(2026, 9, 30))).toEqual({ from: "2026-10-01", to: "2026-10-30" });
+  it("defaults to yesterday in the dashboard business timezone", () => {
+    expect(initialDateRange(new Date(2026, 9, 30))).toEqual({ from: "2026-10-29", to: "2026-10-29" });
   });
 });

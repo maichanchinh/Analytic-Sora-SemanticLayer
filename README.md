@@ -26,6 +26,8 @@ uv sync --all-groups
 uv run api.py
 ```
 
+Khi cần xem log chi tiết lúc kiểm tra app hoặc lỗi truy vấn, chạy `uv run api.py --debug`.
+
 API lắng nghe tại `http://127.0.0.1:8000`. Kiểm tra endpoint apps:
 
 ```sh

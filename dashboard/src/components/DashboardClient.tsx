@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { Filters } from "@/components/Filters";
 import { DashboardRenderer } from "@/components/DashboardRenderer";
+import { Icon } from "@/components/Icon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { type WidgetState } from "@/components/WidgetRenderer";
-import { getApps, getCampaigns, getCountries, getDashboard, getDashboardList, getDimensionCatalog, runQuery } from "@/lib/api";
+import { getApps, getCampaigns, getCountries, getDashboard, getDashboardList, getDimensionCatalog, runQueryBatch } from "@/lib/api";
 import { initialDateRange, queryForWidget } from "@/lib/query";
 import type { AppOption, DashboardConfig, DashboardFilters } from "@/lib/types";
 
@@ -61,19 +63,49 @@ export function DashboardClient() {
     let active = true;
     const supportedTypes = new Set(["metric", "area_chart", "bar_chart", "table"]);
     setWidgetStates(Object.fromEntries(config.widgets.map((widget) => [widget.id, { status: "loading" }])));
-    Promise.all(config.widgets.map(async (widget) => {
+    const initialStates: Record<string, WidgetState> = {};
+    const queries = config.widgets.flatMap((widget) => {
       if (!supportedTypes.has(widget.type)) {
-        return [widget.id, { status: "error", message: `Unsupported widget type: ${widget.type}` } satisfies WidgetState] as const;
+        initialStates[widget.id] = { status: "error", message: `Unsupported widget type: ${widget.type}` };
+        return [];
       }
-      try {
-        const modelDimensions = dimensions[widget.model] ?? new Set();
-        const request = queryForWidget(widget, filters, modelDimensions);
-        const result = await runQuery({ ...request, ...(widget.compare_previous ? { compare_previous_period: true } : {}) });
-        return [widget.id, { status: "success", result } satisfies WidgetState] as const;
-      } catch (error) {
-        return [widget.id, { status: "error", message: error instanceof Error ? error.message : "Widget query failed." } satisfies WidgetState] as const;
-      }
-    })).then((entries) => active && setWidgetStates(Object.fromEntries(entries)));
+      const modelDimensions = dimensions[widget.model] ?? new Set();
+      const request = queryForWidget(widget, filters, modelDimensions);
+      return [{
+        id: widget.id,
+        ...request,
+        ...(widget.compare_previous ? { compare_previous_period: true } : {}),
+      }];
+    });
+
+    if (!queries.length) {
+      setWidgetStates(initialStates);
+      return () => { active = false; };
+    }
+
+    runQueryBatch(queries)
+      .then(({ results }) => {
+        const resultsById = new Map(results.map((result) => [result.id, result]));
+        const entries = config.widgets.map((widget) => {
+          const result = resultsById.get(widget.id);
+          if (!result) {
+            return [widget.id, initialStates[widget.id] ?? { status: "error", message: "Widget query returned no result." }] as const;
+          }
+          if ("error" in result) {
+            return [widget.id, { status: "error", message: result.error } satisfies WidgetState] as const;
+          }
+          return [widget.id, { status: "success", result: result.result } satisfies WidgetState] as const;
+        });
+        if (active) setWidgetStates(Object.fromEntries(entries));
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Widget query failed.";
+        const entries = config.widgets.map((widget) => [
+          widget.id,
+          initialStates[widget.id] ?? { status: "error", message },
+        ] as const);
+        if (active) setWidgetStates(Object.fromEntries(entries));
+      });
     return () => { active = false; };
   }, [config, dimensions, filters]);
 
@@ -96,12 +128,12 @@ export function DashboardClient() {
       <a className="brand" href="/" aria-label="Sora dashboard home"><span className="brand-mark">S</span><span className="brand-copy">Sora<span className="brand-muted"> / Analytics</span></span></a>
       <div className="nav-label">WORKSPACE</div>
       <nav aria-label="Dashboards">
-        {dashboards.map((item) => <button key={item.id} className={`nav-item ${config?.id === item.id ? "active" : ""}`} onClick={() => void changeDashboard(item.id)}>{item.title}</button>)}
+        {dashboards.map((item) => <button key={item.id} className={`nav-item ${config?.id === item.id ? "active" : ""}`} onClick={() => void changeDashboard(item.id)}><Icon name="dashboard" /><span className="nav-item-label">{item.title}</span></button>)}
       </nav>
       <div className="sidebar-footer"><span className="status-dot" /> Read-only semantic data</div>
     </aside>
     <section className="main-content">
-      <header className="topbar"><div><span className="eyebrow">ANALYTICS WORKSPACE</span><div className="breadcrumb">Dashboards <span>/</span> {config?.title ?? "Overview"}</div></div><div className="avatar" aria-label="Analytics">SA</div></header>
+      <header className="topbar"><div><span className="eyebrow">ANALYTICS WORKSPACE</span><div className="breadcrumb">Dashboards <span>/</span> {config?.title ?? "Overview"}</div></div><div className="topbar-actions"><ThemeToggle /><div className="avatar" aria-label="Analytics">SA</div></div></header>
       <div className="page-content">
         {loadingDashboard && <div className="page-state">Loading dashboard configuration…</div>}
         {pageError && <div className="page-error" role="alert"><strong>Dashboard unavailable</strong><span>{pageError}</span></div>}

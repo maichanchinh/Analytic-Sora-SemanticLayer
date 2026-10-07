@@ -71,3 +71,15 @@ export interface QueryRequest {
   date_range?: DateRange;
   compare_previous_period?: boolean;
 }
+
+export interface QueryBatchItem extends QueryRequest {
+  id: string;
+}
+
+export type QueryBatchItemResult =
+  | { id: string; result: QueryResult }
+  | { id: string; error: string };
+
+export interface QueryBatchResponse {
+  results: QueryBatchItemResult[];
+}

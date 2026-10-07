@@ -1,4 +1,11 @@
-import type { AppOption, DashboardConfig, QueryRequest, QueryResult } from "@/lib/types";
+import type {
+  AppOption,
+  DashboardConfig,
+  QueryBatchItem,
+  QueryBatchResponse,
+  QueryRequest,
+  QueryResult,
+} from "@/lib/types";
 
 const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 export const apiBaseUrl = configuredBaseUrl?.replace(/\/$/, "");
@@ -65,6 +72,10 @@ export function getDashboard(id: string): Promise<DashboardConfig> {
 
 export function runQuery(request: QueryRequest): Promise<QueryResult> {
   return postJson<QueryResult>("/api/v1/query", request);
+}
+
+export function runQueryBatch(queries: QueryBatchItem[]): Promise<QueryBatchResponse> {
+  return postJson<QueryBatchResponse>("/api/v1/query", { queries });
 }
 
 export async function getCountries(): Promise<Array<{ country_code: string; country_name: string }>> {

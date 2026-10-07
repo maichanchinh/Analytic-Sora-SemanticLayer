@@ -67,46 +67,6 @@
       "dimensions": ["app_id"],
       "unavailable_metrics": ["returning_users", "new_users / active_users", "total_users", "engagement_rate", "average_engagement_duration", "traffic_source · Organic Search", "traffic_source · in_house", "traffic_source · all", "traffic_source · ads"],
       "span": 12
-    },
-    {
-      "id": "app_performance_retention",
-      "section": "App Performance",
-      "type": "table",
-      "title": "Retention by App and Cohort Day",
-      "model": "ga4_retention_cohort",
-      "metrics": ["retention_rate"],
-      "dimensions": ["app_id", "cohort_day"],
-      "span": 12
-    },
-    {
-      "id": "source_revenue_cost",
-      "section": "Source Metrics",
-      "type": "metric",
-      "title": "Native AdMob Revenue and Google Ads Cost",
-      "model": "finance_daily",
-      "metrics": ["admob_revenue_native", "google_ads_cost_native"],
-      "dimensions": [],
-      "span": 6
-    },
-    {
-      "id": "ga4_revenue_reference",
-      "section": "Source Metrics",
-      "type": "table",
-      "title": "GA4 Total Revenue Reference by Property",
-      "model": "ga4_daily_overview",
-      "metrics": ["ga4_total_revenue_reference"],
-      "dimensions": ["property_name", "property_id"],
-      "span": 6
-    },
-    {
-      "id": "admob_delivery",
-      "section": "AdMob",
-      "type": "metric",
-      "title": "AdMob Delivery and Efficiency",
-      "model": "admob_mediation_daily",
-      "metrics": ["impressions", "clicks", "impression_ctr", "observed_ecpm"],
-      "dimensions": [],
-      "span": 12
     }
   ]
 }

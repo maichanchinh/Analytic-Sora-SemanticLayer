@@ -1,4 +1,4 @@
-import type { DashboardFilters, DashboardWidget, QueryRequest } from "@/lib/types";
+import type { DashboardFilters, DashboardWidget, DateRange, QueryRequest } from "@/lib/types";
 
 export function queryForWidget(
   widget: DashboardWidget,
