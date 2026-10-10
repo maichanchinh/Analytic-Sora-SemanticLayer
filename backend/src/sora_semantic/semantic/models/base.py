@@ -23,6 +23,19 @@ class SilverSemanticDefinition:
     description: str
 
     def build(self, table: Any) -> SemanticTable:
+        aliased_sources = {
+            item.name: f"__semantic_source_{item.name}"
+            for item in self.metrics
+            if item.aggregation == "sum" and item.name == item.source_column
+        }
+        if aliased_sources:
+            table = table.mutate(
+                **{
+                    aliased_sources[item.name]: table[item.source_column]
+                    for item in self.metrics
+                    if item.name in aliased_sources
+                }
+            )
         semantic_table = to_semantic_table(
             table,
             name=self.name,
@@ -38,7 +51,11 @@ class SilverSemanticDefinition:
         if self.metrics:
             semantic_table = semantic_table.with_measures(
                 **{
-                    item.name: item.as_bsl_measure(self.name, self.grain)
+                    item.name: item.as_bsl_measure(
+                        self.name,
+                        self.grain,
+                        source_column_override=aliased_sources.get(item.name),
+                    )
                     for item in self.metrics
                 }
             )

@@ -26,7 +26,14 @@ class MetricDefinition:
     multiplier: float = 1.0
     null_behavior: str | None = None
 
-    def as_bsl_measure(self, dataset: str, grain: tuple[str, ...]) -> Measure:
+    def as_bsl_measure(
+        self,
+        dataset: str,
+        grain: tuple[str, ...],
+        *,
+        source_column_override: str | None = None,
+    ) -> Measure:
+        measure_source_column = source_column_override or self.source_column
         metadata: dict[str, Any] = {
             "source": dataset,
             "source_column": self.source_column,
@@ -49,7 +56,7 @@ class MetricDefinition:
             metadata["null_behavior"] = self.null_behavior
 
         if self.aggregation == "sum":
-            expression = lambda table: table[self.source_column].sum()
+            expression = lambda table: table[measure_source_column].sum()
         elif self.aggregation == "sum_preserve_null":
             expression = self._sum_preserve_null
         elif self.aggregation == "difference_preserve_null":

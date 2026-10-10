@@ -38,16 +38,16 @@ API chưa có authentication; chỉ expose trong mạng nội bộ được ki�
 
 ## Chạy MCP
 
-Chạy stdio cho MCP client:
+Mặc định chạy Streamable HTTP tại `http://127.0.0.1:8001/mcp` (dùng được với MCP Inspector):
 
 ```sh
 cd backend && uv run mcp.py
 ```
 
-Hoặc chạy Streamable HTTP tại `http://127.0.0.1:8001/mcp`:
+Chọn stdio nếu MCP client yêu cầu transport này:
 
 ```sh
-cd backend && uv run mcp.py --transport streamable-http
+cd backend && uv run mcp.py --transport stdio
 ```
 
 ## Chạy Dashboard

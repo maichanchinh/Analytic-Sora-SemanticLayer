@@ -1,16 +1,16 @@
 import asyncio
-import logging
 import os
 from pathlib import Path
 import socket
 import sys
 import unittest
+from unittest.mock import patch
 
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 import uvicorn
 
-from mcp_test_support import make_source
+from mcp_test_support import REPORT_DATE, make_source
 from sora_semantic.mcp import create_mcp_server
 from test_support import ignore_known_ibis_duckdb_deprecation
 
@@ -31,65 +31,83 @@ class McpToolTests(unittest.IsolatedAsyncioTestCase):
         super().setUpClass()
         ignore_known_ibis_duckdb_deprecation()
 
-    async def test_tools_expose_apps_metrics_and_shared_query_contract(self):
+    async def test_report_tools_default_date_filter_and_rank_apps(self):
         source = make_source()
         server = create_mcp_server(source_factory=lambda: source)
 
-        async with Client(server) as client:
-            tools = await client.list_tools()
-            apps = await client.call_tool("list_apps")
-            metrics = await client.call_tool("list_metrics")
-            query = await client.call_tool(
-                "query_metrics",
-                {
-                    "model": "dim_app",
-                    "dimensions": ["app_id", "display_name"],
-                    "filters": {"app_id": "app.a"},
-                },
-            )
-            date_query = await client.call_tool(
-                "query_metrics",
-                {
-                    "model": "dim_date",
-                    "dimensions": ["date"],
-                    "date_range": {"from": "2026-10-02", "to": "2026-10-03"},
-                },
-            )
+        with patch("sora_semantic.mcp._yesterday_report_date", return_value=REPORT_DATE):
+            async with Client(server) as client:
+                tools = await client.list_tools()
+                apps = await client.call_tool("list_apps")
+                summary = await client.call_tool("get_business_summary")
+                app_summary = await client.call_tool(
+                    "get_business_summary",
+                    {
+                        "date_range": {"from": "2026-10-06", "to": "2026-10-06"},
+                        "app_id": "app.a",
+                    },
+                )
+                top_revenue = await client.call_tool(
+                    "get_top_apps", {"sort_by": "revenue"}
+                )
+                top_roas = await client.call_tool("get_top_apps", {"sort_by": "roas"})
 
         self.assertEqual(
             {tool.name for tool in tools},
-            {"list_apps", "list_metrics", "query_metrics"},
+            {"list_apps", "get_business_summary", "get_top_apps"},
         )
         self.assertEqual(
-            [item["app_id"] for item in result_data(apps)["apps"]],
-            ["app.a", "app.b"],
+            len(result_data(apps)["apps"]), 6
         )
-        metric_models = {item["model"] for item in result_data(metrics)["models"]}
-        self.assertIn("finance_daily", metric_models)
-        self.assertEqual(result_data(query)["rows"], [{"app_id": "app.a", "display_name": "Alpha"}])
+        summary_data = result_data(summary)
+        self.assertEqual(summary_data["date_range"], {"from": "2026-10-06", "to": "2026-10-06"})
+        self.assertEqual(summary_data["currency"], "VND")
+        self.assertAlmostEqual(summary_data["revenue_vnd"], 685.0)
+        self.assertAlmostEqual(summary_data["cost_vnd"], 150.0)
+        self.assertAlmostEqual(summary_data["roas_vnd"], 685 / 150)
+        self.assertEqual(summary_data["active_users"], 33)
+        self.assertEqual(summary_data["new_users"], 14)
+        self.assertEqual(len(summary_data["notes"]), 2)
+        self.assertIn("không đảm bảo", summary_data["notes"][1])
+        self.assertIn("AdMob", summary_data["notes"][0])
+
+        app_data = result_data(app_summary)
+        self.assertEqual(app_data["app_id"], "app.a")
+        self.assertAlmostEqual(app_data["revenue_vnd"], 150.0)
+        self.assertAlmostEqual(app_data["cost_vnd"], 30.0)
+        self.assertAlmostEqual(app_data["roas_vnd"], 5.0)
+        self.assertEqual(app_data["active_users"], 15)
+        self.assertEqual(app_data["new_users"], 5)
+
+        revenue_apps = result_data(top_revenue)["apps"]
+        roas_apps = result_data(top_roas)["apps"]
         self.assertEqual(
-            [row["date"] for row in result_data(date_query)["rows"]],
-            ["2026-10-02", "2026-10-03"],
+            [row["app_id"] for row in revenue_apps],
+            ["app.c", "app.b", "app.a", "app.d", "app.e"],
         )
+        self.assertEqual(
+            [row["app_id"] for row in roas_apps],
+            ["app.a", "app.b", "app.d", "app.e", "app.f"],
+        )
+        self.assertEqual(len(revenue_apps), 5)
+        self.assertEqual(len(roas_apps), 5)
+        self.assertNotIn("app.c", {row["app_id"] for row in roas_apps})
+        self.assertEqual([row["app_id"] for row in roas_apps[1:4]], ["app.b", "app.d", "app.e"])
+        self.assertEqual(revenue_apps[1]["display_name"], "Beta")
         self.assertTrue(source.connected)
         self.assertTrue(source.closed)
 
-    async def test_query_metrics_returns_contract_errors_for_unregistered_model(self):
+    async def test_report_tools_reject_invalid_date_range(self):
         server = create_mcp_server(source_factory=make_source)
         async with Client(server) as client:
-            with self.assertLogs("fastmcp.server.server", level="DEBUG") as captured:
-                result = await client.call_tool(
-                    "query_metrics",
-                    {"model": "unregistered", "metrics": ["value"]},
-                    raise_on_error=False,
-                )
+            result = await client.call_tool(
+                "get_business_summary",
+                {"date_range": {"from": "2026-10-07", "to": "2026-10-06"}},
+                raise_on_error=False,
+            )
 
         self.assertTrue(result.is_error)
-        self.assertIn("Unsupported semantic model", result.content[0].text)
-        self.assertEqual(len(captured.records), 1)
-        self.assertEqual(captured.records[0].levelno, logging.DEBUG)
-        self.assertNotIn("Traceback", captured.output[0])
-        self.assertNotIn("QueryContractError", captured.output[0])
+        self.assertIn("date_range.from must be on or before", result.content[0].text)
 
     async def test_stdio_transport_smoke(self):
         env = os.environ.copy()
@@ -99,7 +117,7 @@ class McpToolTests(unittest.IsolatedAsyncioTestCase):
         transport = StdioTransport(
             command=sys.executable,
             args=["-m", "mcp_stdio_runner"],
-            cwd=str(ROOT),
+            cwd=str(ROOT.parent),
             env=env,
         )
         async with Client(transport) as client:
@@ -107,7 +125,7 @@ class McpToolTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [item["app_id"] for item in result_data(result)["apps"]],
-            ["app.a", "app.b"],
+            ["app.a", "app.b", "app.d", "app.e", "app.f", "app.c"],
         )
 
     async def test_streamable_http_transport_smoke(self):
@@ -136,7 +154,7 @@ class McpToolTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(
                 [item["app_id"] for item in result_data(result)["apps"]],
-                ["app.a", "app.b"],
+                ["app.a", "app.b", "app.d", "app.e", "app.f", "app.c"],
             )
             self.assertTrue(source.connected)
         finally:

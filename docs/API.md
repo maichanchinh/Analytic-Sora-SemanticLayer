@@ -17,19 +17,19 @@ Các file DuckDB cache cũ trong `backend/.cache` không còn được đọc ho
 
 ## FastMCP
 
-MCP dùng cùng `SemanticRegistry` và `QueryService`, mở kết nối Silver read-only riêng theo lifespan của server. Có thể chạy local qua `stdio`:
+MCP dùng cùng `SemanticRegistry` và `QueryService`, mở kết nối Silver read-only riêng theo lifespan của server. Mặc định server dùng `Streamable HTTP` tại `http://127.0.0.1:8001/mcp`, tiện kết nối MCP Inspector:
 
 ```sh
 cd backend && uv run mcp.py
 ```
 
-Hoặc chạy server `Streamable HTTP` tại `/mcp`:
+Chọn `stdio` khi MCP client yêu cầu transport này:
 
 ```sh
-cd backend && uv run mcp.py --transport streamable-http
+cd backend && uv run mcp.py --transport stdio
 ```
 
-Hai lệnh dùng cùng biến môi trường Silver như API. MCP cung cấp `list_apps`, `list_metrics` và `query_metrics`; tool query nhận `model`, `metrics`, `dimensions`, `filters` và `date_range` theo shared `QueryRequest`. Kết quả dùng shape `model`, `dimensions`, `metrics`, `rows`; query contract lỗi được trả dưới dạng MCP tool error. Không có raw SQL tool.
+Hai lệnh dùng cùng biến môi trường Silver như API. MCP cung cấp `list_apps`, `get_business_summary` và `get_top_apps`. Report mặc định dùng ngày hôm qua theo `Asia/Ho_Chi_Minh`; summary mặc định gồm mọi app và hỗ trợ lọc `app_id`. Metrics tài chính dùng VND-normalized AdMob revenue, Google Ads cost và ROAS; kết quả ghi chú các dòng không quy đổi được theo FX policy. User counts lấy từ GA4, cộng qua country rows và từng ngày, nên không đảm bảo unique users trong app hoặc cả kỳ. Không expose raw SQL hoặc query tổng quát qua MCP.
 
 Authorization và app scope chưa được triển khai trong dự án hiện tại. Bảo vệ server HTTP bằng network boundary phù hợp.
 
