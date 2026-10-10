@@ -1,6 +1,7 @@
 """Run the local MCP server over Streamable HTTP or stdio."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,17 @@ def main() -> None:
         default="streamable-http",
         help="MCP transport to use (default: streamable-http)",
     )
+    parser.add_argument(
+        "--host",
+        default=os.getenv("MCP_HOST", "127.0.0.1"),
+        help="Streamable HTTP bind host (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("MCP_PORT", "8001")),
+        help="Streamable HTTP bind port (default: 8001)",
+    )
     args = parser.parse_args()
 
     if args.transport == "stdio":
@@ -40,8 +52,8 @@ def main() -> None:
     else:
         mcp.run(
             transport="streamable-http",
-            host="127.0.0.1",
-            port=8001,
+            host=args.host,
+            port=args.port,
             path="/mcp",
         )
 

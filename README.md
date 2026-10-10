@@ -2,7 +2,7 @@
 
 Analytics layer chỉ đọc Silver Parquet từ Sora trên RustFS. Backend Python cung cấp FastAPI và FastMCP; Dashboard Next.js gọi API để hiển thị dữ liệu.
 
-Tài liệu: [Architecture](docs/ARCHITECTURE.md), [Silver Data Catalog](docs/SILVER_DATA_CATALOG.md), [kết nối Silver](docs/SILVER_CONNECTION.md), [API và MCP](docs/API.md).
+Tài liệu: [Architecture](docs/ARCHITECTURE.md), [Silver Data Catalog](docs/SILVER_DATA_CATALOG.md), [kết nối Silver](docs/SILVER_CONNECTION.md), [API và MCP](docs/API.md), [Docker và Dockhand](docs/DOCKER.md).
 
 ## Cấu hình
 
@@ -59,6 +59,10 @@ pnpm dev
 ```
 
 Dashboard mặc định chạy tại `http://localhost:3000`; API mặc định cho phép origin này trong CORS.
+
+## Chạy bằng Docker
+
+Tạo `.env` từ `.env.example`, điền Silver credentials read-only rồi chạy `docker compose up --build -d`. Hướng dẫn build riêng từng service, truy cập MCP và deploy bằng Git qua Dockhand nằm trong [Docker và Dockhand](docs/DOCKER.md).
 
 ## Tests
 
