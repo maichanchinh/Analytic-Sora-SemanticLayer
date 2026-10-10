@@ -135,8 +135,11 @@ def create_app(
         lifespan=lifespan,
     )
     cors_origins = os.getenv(
-        "DASHBOARD_CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
+        "CORS_ORIGINS",
+        os.getenv(
+            "DASHBOARD_CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ),
     )
     app.add_middleware(
         CORSMiddleware,

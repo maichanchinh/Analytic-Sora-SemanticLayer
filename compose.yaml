@@ -1,21 +1,49 @@
+x-build-context: &build-context
+  context: ${BUILD_CONTEXT:-.}
+
+x-silver-environment: &silver-environment
+  APP_CONFIG__S3__SILVER__ENDPOINT_URL: ${APP_CONFIG__S3__SILVER__ENDPOINT_URL:-}
+  APP_CONFIG__S3__SILVER__BUCKET: ${APP_CONFIG__S3__SILVER__BUCKET:-}
+  APP_CONFIG__S3__SILVER__REGION_NAME: ${APP_CONFIG__S3__SILVER__REGION_NAME:-}
+  APP_CONFIG__S3__SILVER__ACCESS_KEY_ID: ${APP_CONFIG__S3__SILVER__ACCESS_KEY_ID:-}
+  APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY: ${APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY:-}
+  APP_CONFIG__S3__SILVER__ADDRESSING_STYLE: ${APP_CONFIG__S3__SILVER__ADDRESSING_STYLE:-path}
+  APP_CONFIG__S3__SILVER__VERIFY_SSL: ${APP_CONFIG__S3__SILVER__VERIFY_SSL:-true}
+
+x-production-environment: &production-environment
+  APP_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+x-json-logging: &json-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 services:
   api:
     build:
-      context: .
+      <<: *build-context
       dockerfile: backend/Dockerfile
-    command: ["uvicorn", "sora_semantic.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      - uvicorn
+      - sora_semantic.api:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --log-config
+      - /app/backend/src/sora_semantic/logging.json
+      - --log-level
+      - ${LOG_LEVEL:-INFO}
     restart: unless-stopped
     environment:
-      APP_CONFIG__S3__SILVER__ENDPOINT_URL: ${APP_CONFIG__S3__SILVER__ENDPOINT_URL:-}
-      APP_CONFIG__S3__SILVER__BUCKET: ${APP_CONFIG__S3__SILVER__BUCKET:-}
-      APP_CONFIG__S3__SILVER__REGION_NAME: ${APP_CONFIG__S3__SILVER__REGION_NAME:-}
-      APP_CONFIG__S3__SILVER__ACCESS_KEY_ID: ${APP_CONFIG__S3__SILVER__ACCESS_KEY_ID:-}
-      APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY: ${APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY:-}
-      APP_CONFIG__S3__SILVER__ADDRESSING_STYLE: ${APP_CONFIG__S3__SILVER__ADDRESSING_STYLE:-path}
-      APP_CONFIG__S3__SILVER__VERIFY_SSL: ${APP_CONFIG__S3__SILVER__VERIFY_SSL:-true}
-      DASHBOARD_CORS_ORIGINS: ${DASHBOARD_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      <<: [*silver-environment, *production-environment]
+      SERVICE_NAME: api
+      CORS_ORIGINS: ${CORS_ORIGINS:-${DASHBOARD_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}}
     ports:
       - "${API_HOST_PORT:-8000}:8000"
+    logging: *json-logging
     healthcheck:
       test:
         - CMD
@@ -29,20 +57,23 @@ services:
 
   mcp:
     build:
-      context: .
+      <<: *build-context
       dockerfile: backend/Dockerfile
-    command: ["mcp.py", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8001"]
+    command:
+      - mcp.py
+      - --transport
+      - streamable-http
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
     restart: unless-stopped
     environment:
-      APP_CONFIG__S3__SILVER__ENDPOINT_URL: ${APP_CONFIG__S3__SILVER__ENDPOINT_URL:-}
-      APP_CONFIG__S3__SILVER__BUCKET: ${APP_CONFIG__S3__SILVER__BUCKET:-}
-      APP_CONFIG__S3__SILVER__REGION_NAME: ${APP_CONFIG__S3__SILVER__REGION_NAME:-}
-      APP_CONFIG__S3__SILVER__ACCESS_KEY_ID: ${APP_CONFIG__S3__SILVER__ACCESS_KEY_ID:-}
-      APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY: ${APP_CONFIG__S3__SILVER__SECRET_ACCESS_KEY:-}
-      APP_CONFIG__S3__SILVER__ADDRESSING_STYLE: ${APP_CONFIG__S3__SILVER__ADDRESSING_STYLE:-path}
-      APP_CONFIG__S3__SILVER__VERIFY_SSL: ${APP_CONFIG__S3__SILVER__VERIFY_SSL:-true}
+      <<: [*silver-environment, *production-environment]
+      SERVICE_NAME: mcp
     ports:
       - "${MCP_HOST_PORT:-8001}:8001"
+    logging: *json-logging
     healthcheck:
       test:
         - CMD
@@ -56,13 +87,14 @@ services:
 
   dashboard:
     build:
-      context: .
+      <<: *build-context
       dockerfile: dashboard/Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8000}
     restart: unless-stopped
     ports:
       - "${DASHBOARD_HOST_PORT:-3000}:3000"
+    logging: *json-logging
     healthcheck:
       test:
         - CMD

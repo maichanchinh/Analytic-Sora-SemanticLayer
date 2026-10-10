@@ -410,7 +410,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_dashboard_cors_allows_configured_frontend_origin(self) -> None:
         source = InMemorySilverSource()
-        with patch.dict("os.environ", {"DASHBOARD_CORS_ORIGINS": "http://localhost:3000"}):
+        with patch.dict("os.environ", {"CORS_ORIGINS": "http://localhost:3000"}):
             async with api_client(create_app(source_factory=lambda: source)) as client:
                 response = await client.options(
                     "/api/v1/dashboards",
@@ -423,6 +423,24 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.headers.get("access-control-allow-origin"), "http://localhost:3000"
+        )
+
+    async def test_dashboard_cors_supports_legacy_environment_name(self) -> None:
+        source = InMemorySilverSource()
+        with patch.dict("os.environ", {"DASHBOARD_CORS_ORIGINS": "https://dashboard.example.test"}):
+            async with api_client(create_app(source_factory=lambda: source)) as client:
+                response = await client.options(
+                    "/api/v1/dashboards",
+                    headers={
+                        "Origin": "https://dashboard.example.test",
+                        "Access-Control-Request-Method": "GET",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers.get("access-control-allow-origin"),
+            "https://dashboard.example.test",
         )
 
     async def test_unknown_and_invalid_dashboard_ids_return_404(self) -> None:

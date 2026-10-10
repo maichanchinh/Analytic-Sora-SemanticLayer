@@ -5,7 +5,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/app/backend/.venv
+    UV_PROJECT_ENVIRONMENT=/app/backend/.venv \
+    APP_ENV=production \
+    LOG_LEVEL=INFO \
+    SERVICE_NAME=api
 
 WORKDIR /app/backend
 
@@ -26,4 +29,4 @@ USER app
 EXPOSE 8000 8001
 
 ENTRYPOINT ["uv", "run", "--no-sync"]
-CMD ["uvicorn", "sora_semantic.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "sora_semantic.api:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "/app/backend/src/sora_semantic/logging.json"]

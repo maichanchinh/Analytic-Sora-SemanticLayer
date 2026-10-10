@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "json": {
+      "()": "sora_semantic.logging_config.JsonFormatter"
+    }
+  },
+  "filters": {
+    "minimum_level": {
+      "()": "sora_semantic.logging_config.MinimumLevelFilter"
+    }
+  },
+  "handlers": {
+    "stdout": {
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout",
+      "level": "DEBUG",
+      "formatter": "json",
+      "filters": ["minimum_level"]
+    }
+  },
+  "root": {
+    "level": "DEBUG",
+    "handlers": ["stdout"]
+  },
+  "loggers": {
+    "uvicorn": {
+      "level": "DEBUG",
+      "handlers": ["stdout"],
+      "propagate": false
+    },
+    "uvicorn.error": {
+      "level": "DEBUG",
+      "handlers": ["stdout"],
+      "propagate": false
+    },
+    "uvicorn.access": {
+      "level": "DEBUG",
+      "handlers": ["stdout"],
+      "propagate": false
+    }
+  }
+}

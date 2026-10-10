@@ -25,6 +25,11 @@ def main() -> None:
         if Path(entry or ".").resolve() != backend_dir
     ]
 
+    os.environ.setdefault("SERVICE_NAME", "mcp")
+    from sora_semantic.logging_config import configure_json_logging
+
+    configure_json_logging()
+
     from sora_semantic.mcp import mcp
 
     parser = argparse.ArgumentParser(description=__doc__)
